@@ -9,6 +9,7 @@
     "dev": "node --watch src/app.js",
     "db:init": "node scripts/init-db.js",
     "db:migrate": "node scripts/migrate-sqlite.js",
+    "tenant:migrate": "node scripts/migrate-tenant.js",
     "menu:import": "node scripts/import-rajarani-menu.js",
     "data:audit": "node scripts/audit-data.js",
     "test": "node --test"
