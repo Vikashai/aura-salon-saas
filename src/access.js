@@ -21,7 +21,7 @@ function can(user, permission) { const permissions=permissionsFor(user);return n
 
 function routePermission(req) {
   const path=req.path,manage=req.method!=='GET'||/\/(new|edit)(\/|$)/.test(path)||/\/send\/|\/archive$|\/status$|\/bulk$|\/import$/.test(path);
-  if(path==='/')return'dashboard.view';
+  if(path==='/dashboard')return'dashboard.view';
   if(path.startsWith('/users')||path.startsWith('/change-password'))return path.startsWith('/users')?'users.manage':null;
   if(path.startsWith('/appointments')||path.startsWith('/api/slots'))return`appointments.${manage?'manage':'view'}`;
   if(path.startsWith('/customers'))return`customers.${manage?'manage':'view'}`;

@@ -23,7 +23,7 @@ function normalizeIndianMobile(value) {
 module.exports = app => {
   const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false,
     message: 'Too many login attempts. Please try again in 15 minutes.' });
-  app.get('/login', (req, res) => req.session.user ? res.redirect('/') : res.render('login.html',{salon_slug:req.query.salon||''}));
+  app.get('/login', (req, res) => req.session.user ? res.redirect('/dashboard') : res.render('login.html',{salon_slug:req.query.salon||''}));
   app.post('/login', loginLimiter, asyncRoute(async (req, res) => {
     const username = String(req.body.username || '').trim(),salonSlug=String(req.body.salon||'').trim().toLowerCase();
     const user = await db.one("SELECT u.*,s.slug salon_slug,s.status salon_status FROM users u JOIN salons s ON s.id=u.salon_id WHERE u.username=:username AND s.slug=:salonSlug AND u.status='Active' AND s.status='Active'", { username,salonSlug });
@@ -32,7 +32,7 @@ module.exports = app => {
       req.session.user = { id:user.id,name:user.name,username:user.username,role:user.role,salon_id:user.salon_id,salon_slug:user.salon_slug };
       await db.rows('UPDATE users SET last_login=NOW(),last_activity=NOW() WHERE id=:id AND salon_id=:salonId',{id:user.id,salonId:user.salon_id});
       await audit(user.id,'auth.login','user',user.id,'Successful login',req);
-      const target = req.session.returnTo || '/';
+      const target = req.session.returnTo || '/dashboard';
       delete req.session.returnTo;
       return res.redirect(target);
     }
@@ -41,9 +41,10 @@ module.exports = app => {
   }));
   app.get('/logout', auth, (req, res) => req.session.destroy(() => res.redirect('/login')));
   app.get('/change-password',auth,(req,res)=>res.render('change_password.html'));
-  app.post('/change-password',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,user=await db.one('SELECT * FROM users WHERE id=:id AND salon_id=:salonId',{id:req.session.user.id,salonId}),current=String(req.body.current_password||''),password=String(req.body.new_password||''),confirm=String(req.body.confirm_password||'');if(!user||!await bcrypt.compare(current,user.password_hash)){req.flash('error','Current password is incorrect.');return res.redirect('/change-password');}if(password.length<8||password!==confirm){req.flash('error','New passwords must match and contain at least 8 characters.');return res.redirect('/change-password');}const hash=await bcrypt.hash(password,12);await db.rows('UPDATE users SET password_hash=:hash,force_password_change=0 WHERE id=:id AND salon_id=:salonId',{hash,id:user.id,salonId});await audit(user.id,'auth.password_changed','user',user.id,'Password changed',req);req.flash('success','Password changed successfully.');res.redirect('/');}));
+  app.post('/change-password',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,user=await db.one('SELECT * FROM users WHERE id=:id AND salon_id=:salonId',{id:req.session.user.id,salonId}),current=String(req.body.current_password||''),password=String(req.body.new_password||''),confirm=String(req.body.confirm_password||'');if(!user||!await bcrypt.compare(current,user.password_hash)){req.flash('error','Current password is incorrect.');return res.redirect('/change-password');}if(password.length<8||password!==confirm){req.flash('error','New passwords must match and contain at least 8 characters.');return res.redirect('/change-password');}const hash=await bcrypt.hash(password,12);await db.rows('UPDATE users SET password_hash=:hash,force_password_change=0 WHERE id=:id AND salon_id=:salonId',{hash,id:user.id,salonId});await audit(user.id,'auth.password_changed','user',user.id,'Password changed',req);req.flash('success','Password changed successfully.');res.redirect('/dashboard');}));
 
-  app.get('/', auth, asyncRoute(async (req, res) => {
+  app.get('/',(req,res)=>res.render('landing.html'));
+  app.get('/dashboard', auth, asyncRoute(async (req, res) => {
     const today = isoDate();
     const salonId=req.user.salon_id;
     const month = today.slice(0, 7);
