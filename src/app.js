@@ -105,5 +105,17 @@ app.use((error, req, res, _next) => {
   return res.status(500).json({ error: message });
 });
 const port = Number(process.env.PORT || 3000);
-if (require.main === module) app.listen(port, '0.0.0.0', () => console.log(`Aura Salon OS running on port ${port}`));
+if (require.main === module) {
+  const start = async () => {
+    if (process.env.AUTO_INIT_DB === 'true') {
+      const { main: initializeDatabase } = require('../scripts/init-db');
+      await initializeDatabase();
+    }
+    app.listen(port, '0.0.0.0', () => console.log(`Aura Salon OS running on port ${port}`));
+  };
+  start().catch(error => {
+    console.error('Application startup failed:', error);
+    process.exitCode = 1;
+  });
+}
 module.exports = app;
