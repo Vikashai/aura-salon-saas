@@ -54,7 +54,7 @@ app.use(async (req,res,next) => {
   try {
     const slug=String(req.query.salon||req.body?.salon||req.session.user?.salon_slug||'').trim().toLowerCase();
     if (!slug) { req.salon=null; res.locals.salon=null; return next(); }
-    const salon=await db.one("SELECT * FROM salons WHERE slug=:slug AND status='Active'",{slug});
+    const salon=await db.one("SELECT * FROM salons WHERE slug=:slug AND status='Active' AND (access_starts_at IS NULL OR access_starts_at<=NOW()) AND (access_ends_at IS NULL OR access_ends_at>=NOW())",{slug});
     if (!salon) return res.status(403).send('Salon access is unavailable.');
     req.salon=salon;res.locals.salon=salon;return next();
   } catch(error){return next(error);}

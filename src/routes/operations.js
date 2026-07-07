@@ -3,6 +3,9 @@ const db = require('../db');
 const multer = require('multer');
 const ExcelJS = require('exceljs');
 const { Readable } = require('node:stream');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const { asyncRoute, isoDate, firstName } = require('../helpers');
 const { sendWhatsApp } = require('../notifications');
 const { auth, loyaltyConfig, awardPoints } = require('./shared');
@@ -230,7 +233,16 @@ module.exports = app => {
     res.json({...base,redeemable_points:redeemablePoints,redeemable_rupees:Math.round(redeemablePoints/cfg.redeem_rate*100)/100});
   }));
 
-  app.get('/settings',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,data={...res.locals.cfg};data.meta_token_configured=Boolean(data.meta_whatsapp_token);data.twilio_token_configured=Boolean(data.twilio_token);data.smtp_pass_configured=Boolean(data.smtp_pass);data.meta_whatsapp_token='';data.twilio_token='';data.smtp_pass='';data.get=(key,fallback='')=>data[key]??fallback;const capacity_pools=await db.rows('SELECT * FROM capacity_pools WHERE salon_id=:salonId ORDER BY is_default DESC,name',{salonId});res.render('settings.html',{data,capacity_pools});}));
+  app.get('/settings',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,data={...res.locals.cfg};data.meta_token_configured=Boolean(data.meta_whatsapp_token);data.twilio_token_configured=Boolean(data.twilio_token);data.smtp_pass_configured=Boolean(data.smtp_pass);data.meta_whatsapp_token='';data.twilio_token='';data.smtp_pass='';data.get=(key,fallback='')=>data[key]??fallback;const capacity_pools=await db.rows('SELECT * FROM capacity_pools WHERE salon_id=:salonId ORDER BY is_default DESC,name',{salonId});res.render('settings.html',{data,capacity_pools,branding:req.salon});}));
+  app.post('/settings/branding',auth,upload.single('logo'),asyncRoute(async(req,res)=>{
+    const salonId=req.user.salon_id,name=String(req.body.brand_name||'').trim(),color=String(req.body.primary_color||'').trim().toLowerCase();
+    if(!name||!/^#[0-9a-f]{6}$/.test(color)){req.flash('error','Enter a salon name and valid brand colour.');return res.redirect('/settings#branding');}
+    let logoUrl=req.salon.logo_url||null;
+    if(req.file){const types={'image/png':'png','image/jpeg':'jpg','image/webp':'webp'};const ext=types[req.file.mimetype];if(!ext){req.flash('error','Logo must be a PNG, JPG or WebP image.');return res.redirect('/settings#branding');}if(req.file.size>2*1024*1024){req.flash('error','Logo must be smaller than 2 MB.');return res.redirect('/settings#branding');}const directory=path.join(__dirname,'..','..','public','uploads','salons');await fs.mkdir(directory,{recursive:true});const filename=`${salonId}-${crypto.randomBytes(8).toString('hex')}.${ext}`;await fs.writeFile(path.join(directory,filename),req.file.buffer);logoUrl=`/static/uploads/salons/${filename}`;}
+    await db.rows('UPDATE salons SET name=:name,primary_color=:color,logo_url=:logoUrl WHERE id=:salonId',{name,color,logoUrl,salonId});
+    await db.rows("INSERT INTO settings(salon_id,`key`,`value`) VALUES(:salonId,'salon_name',:name) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)",{salonId,name});
+    req.flash('success','Branding updated across the dashboard and booking page.');res.redirect('/settings#branding');
+  }));
   app.post('/settings/capacity-pools/add',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,name=String(req.body.new_pool_name||'').trim(),seats=Number.parseInt(req.body.new_pool_seats,10);if(!name||!Number.isInteger(seats)||seats<1){req.flash('error','Enter a pool name and a seat count of at least 1.');return res.redirect('/settings#capacity');}await db.rows('INSERT INTO capacity_pools (salon_id,name,seats) VALUES (:salonId,:name,:seats)',{salonId,name,seats});req.flash('success',`Capacity pool "${name}" added.`);res.redirect('/settings#capacity');}));
   app.post('/settings/capacity-pools/:id',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,id=Number(req.params.id),name=String(req.body[`pool_name_${id}`]||'').trim(),seats=Number.parseInt(req.body[`pool_seats_${id}`],10);if(!name||!Number.isInteger(seats)||seats<1){req.flash('error','Enter a pool name and a seat count of at least 1.');return res.redirect('/settings#capacity');}await db.rows('UPDATE capacity_pools SET name=:name,seats=:seats WHERE id=:id AND salon_id=:salonId',{salonId,name,seats,id});req.flash('success','Capacity pool updated.');res.redirect('/settings#capacity');}));
   app.post('/settings/capacity-pools/:id/delete',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,id=Number(req.params.id),pool=await db.one('SELECT is_default FROM capacity_pools WHERE id=:id AND salon_id=:salonId',{id,salonId});if(!pool){req.flash('error','Capacity pool not found.');return res.redirect('/settings#capacity');}if(pool.is_default){req.flash('error','The default pool cannot be deleted.');return res.redirect('/settings#capacity');}await db.rows('UPDATE services SET capacity_pool_id=NULL WHERE capacity_pool_id=:id AND salon_id=:salonId',{id,salonId});await db.rows('DELETE FROM capacity_pools WHERE id=:id AND salon_id=:salonId',{id,salonId});req.flash('success','Capacity pool removed. Services using it now use the default pool.');res.redirect('/settings#capacity');}));

@@ -46,7 +46,7 @@ module.exports = app => {
     const temporaryPassword=crypto.randomBytes(9).toString('base64url');
     const passwordHash=await bcrypt.hash(temporaryPassword,12),ownerUsername=`${slug}-owner`.slice(0,100);
     const result=await db.transaction(async connection=>{
-      const [salon]=await connection.execute("INSERT INTO salons(name,slug,status,owner_name,owner_email,owner_mobile,approved_at) VALUES(?,?,'Active',?,?,?,NOW())",[application.salon_name,slug,application.owner_name,application.email,application.mobile]);
+      const [salon]=await connection.execute("INSERT INTO salons(name,slug,status,owner_name,owner_email,owner_mobile,payment_status,access_starts_at,access_ends_at,approved_at) VALUES(?,?,'Active',?,?,?,'Pending',NOW(),DATE_ADD(NOW(),INTERVAL 30 DAY),NOW())",[application.salon_name,slug,application.owner_name,application.email,application.mobile]);
       await connection.execute("UPDATE salon_applications SET status='Approved',salon_id=?,reviewed_at=NOW() WHERE id=?",[salon.insertId,id]);return salon;
     });
     await db.transaction(async connection=>{
@@ -62,5 +62,11 @@ module.exports = app => {
   app.post('/platform/salons/:id/status',platformAuth,asyncRoute(async(req,res)=>{
     const status=req.body.status==='Active'?'Active':'Suspended';
     await db.rows('UPDATE salons SET status=:status WHERE id=:id',{status,id:Number(req.params.id)});req.flash('success',`Salon access ${status==='Active'?'restored':'suspended'}.`);res.redirect('/platform');
+  }));
+  app.post('/platform/salons/:id/access',platformAuth,asyncRoute(async(req,res)=>{
+    const id=Number(req.params.id),paymentStatus=['Pending','Paid','Overdue','Waived'].includes(req.body.payment_status)?req.body.payment_status:'Pending';
+    const accessEnds=String(req.body.access_ends_at||'').trim()||null,paymentNotes=String(req.body.payment_notes||'').trim().slice(0,500)||null;
+    await db.rows('UPDATE salons SET payment_status=:paymentStatus,payment_notes=:paymentNotes,access_ends_at=:accessEnds WHERE id=:id',{paymentStatus,paymentNotes,accessEnds,id});
+    req.flash('success','Manual payment and access period updated.');res.redirect('/platform');
   }));
 };

@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS salons (
   status ENUM('Pending','Active','Suspended','Rejected') NOT NULL DEFAULT 'Pending',
   owner_name VARCHAR(150) NOT NULL, owner_email VARCHAR(190) NOT NULL,
   owner_mobile VARCHAR(30), logo_url VARCHAR(500), primary_color VARCHAR(20) DEFAULT '#dfff3f',
-  custom_domain VARCHAR(190), approved_at DATETIME NULL,
+  custom_domain VARCHAR(190), payment_status ENUM('Pending','Paid','Overdue','Waived') DEFAULT 'Pending',
+  payment_notes VARCHAR(500), access_starts_at DATETIME NULL, access_ends_at DATETIME NULL, approved_at DATETIME NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_salons_status (status), INDEX idx_salons_owner_email (owner_email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
