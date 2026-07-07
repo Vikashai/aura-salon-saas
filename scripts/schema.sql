@@ -1,5 +1,35 @@
 SET NAMES utf8mb4;
 
+-- SaaS control plane. These records are intentionally separate from salon data.
+CREATE TABLE IF NOT EXISTS salons (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(190) NOT NULL, slug VARCHAR(80) NOT NULL UNIQUE,
+  status ENUM('Pending','Active','Suspended','Rejected') NOT NULL DEFAULT 'Pending',
+  owner_name VARCHAR(150) NOT NULL, owner_email VARCHAR(190) NOT NULL,
+  owner_mobile VARCHAR(30), logo_url VARCHAR(500), primary_color VARCHAR(20) DEFAULT '#dfff3f',
+  custom_domain VARCHAR(190), approved_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_salons_status (status), INDEX idx_salons_owner_email (owner_email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS salon_applications (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  salon_name VARCHAR(190) NOT NULL, owner_name VARCHAR(150) NOT NULL,
+  email VARCHAR(190) NOT NULL, mobile VARCHAR(30) NOT NULL, city VARCHAR(120),
+  message TEXT, status ENUM('New','Approved','Rejected') NOT NULL DEFAULT 'New',
+  salon_id INT UNSIGNED NULL, reviewed_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_application_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE SET NULL,
+  INDEX idx_applications_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS platform_admins (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL,
+  username VARCHAR(100) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL,
+  status ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  last_login DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS customers (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   customer_id VARCHAR(30) UNIQUE, name VARCHAR(150) NOT NULL, mobile VARCHAR(30) NOT NULL,

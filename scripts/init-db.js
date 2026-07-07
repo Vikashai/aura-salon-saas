@@ -73,6 +73,14 @@ async function main() {
   for (const [key, value] of Object.entries(defaults)) {
     await connection.execute('INSERT IGNORE INTO settings (`key`, `value`) VALUES (?, ?)', [key, value]);
   }
+  const [[{ count: platformAdminCount }]] = await connection.query('SELECT COUNT(*) AS count FROM platform_admins');
+  if (!platformAdminCount && process.env.INITIAL_PLATFORM_ADMIN_PASSWORD) {
+    const platformHash = await bcrypt.hash(process.env.INITIAL_PLATFORM_ADMIN_PASSWORD, 12);
+    await connection.execute(
+      "INSERT INTO platform_admins (name,username,password_hash,status) VALUES (?,?,?,'Active')",
+      [process.env.INITIAL_PLATFORM_ADMIN_NAME || 'Platform Admin', process.env.INITIAL_PLATFORM_ADMIN_USERNAME || 'platform-admin', platformHash],
+    );
+  }
   const [[{ count }]] = await connection.query('SELECT COUNT(*) AS count FROM users');
   if (!count) {
     if (!process.env.INITIAL_ADMIN_PASSWORD) throw new Error('INITIAL_ADMIN_PASSWORD is required for the first admin account.');
