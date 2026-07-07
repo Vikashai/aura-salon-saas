@@ -1,5 +1,6 @@
 'use strict';
 const bcrypt = require('bcryptjs');
+const crypto = require('node:crypto');
 const { rateLimit } = require('express-rate-limit');
 const db = require('../db');
 const { asyncRoute } = require('../helpers');
@@ -42,11 +43,18 @@ module.exports = app => {
     const id=Number(req.params.id),application=await db.one("SELECT * FROM salon_applications WHERE id=:id AND status='New'",{id});
     if(!application){req.flash('error','This application is no longer awaiting review.');return res.redirect('/platform');}
     const slug=await uniqueSlug(application.salon_name);
+    const temporaryPassword=crypto.randomBytes(9).toString('base64url');
+    const passwordHash=await bcrypt.hash(temporaryPassword,12),ownerUsername=`${slug}-owner`.slice(0,100);
     const result=await db.transaction(async connection=>{
       const [salon]=await connection.execute("INSERT INTO salons(name,slug,status,owner_name,owner_email,owner_mobile,approved_at) VALUES(?,?,'Active',?,?,?,NOW())",[application.salon_name,slug,application.owner_name,application.email,application.mobile]);
       await connection.execute("UPDATE salon_applications SET status='Approved',salon_id=?,reviewed_at=NOW() WHERE id=?",[salon.insertId,id]);return salon;
     });
-    req.flash('success',`${application.salon_name} approved. Tenant ID ${result.insertId} is ready for provisioning.`);res.redirect('/platform');
+    await db.transaction(async connection=>{
+      await connection.execute("INSERT INTO capacity_pools(salon_id,name,seats,is_default) VALUES(?,'General',1,1)",[result.insertId]);
+      await connection.execute("INSERT INTO settings(salon_id,`key`,`value`) SELECT ?,`key`,`value` FROM settings WHERE salon_id=(SELECT MIN(id) FROM salons WHERE status='Active') ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)",[result.insertId]);
+      await connection.execute("INSERT INTO users(salon_id,name,username,password_hash,role,status,force_password_change) VALUES(?,?,?,?, 'owner','Active',1)",[result.insertId,application.owner_name,ownerUsername,passwordHash]);
+    });
+    req.flash('success',`${application.salon_name} approved. Workspace: ${slug}; owner username: ${ownerUsername}; temporary password: ${temporaryPassword}`);res.redirect('/platform');
   }));
   app.post('/platform/applications/:id/reject',platformAuth,asyncRoute(async(req,res)=>{
     await db.rows("UPDATE salon_applications SET status='Rejected',reviewed_at=NOW() WHERE id=:id AND status='New'",{id:Number(req.params.id)});req.flash('success','Application rejected.');res.redirect('/platform');

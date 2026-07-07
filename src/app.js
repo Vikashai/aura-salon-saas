@@ -50,6 +50,15 @@ app.use(session({
   resave: false, saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 28800000 },
 }));
+app.use(async (req,res,next) => {
+  try {
+    const slug=String(req.query.salon||req.body?.salon||req.session.user?.salon_slug||'').trim().toLowerCase();
+    if (!slug) { req.salon=null; res.locals.salon=null; return next(); }
+    const salon=await db.one("SELECT * FROM salons WHERE slug=:slug AND status='Active'",{slug});
+    if (!salon) return res.status(403).send('Salon access is unavailable.');
+    req.salon=salon;res.locals.salon=salon;return next();
+  } catch(error){return next(error);}
+});
 app.use((req, res, next) => {
   req.flash = (category, message) => { req.session.flashes ||= []; req.session.flashes.push([category, message]); };
   const args = { ...req.query, get: (key, fallback = '') => req.query[key] ?? fallback };
@@ -62,7 +71,7 @@ app.use((req, res, next) => {
 });
 app.use(async (req, res, next) => {
   try {
-    const settingsRows = await db.rows('SELECT `key`, `value` FROM settings');
+    const settingsRows = req.salon ? await db.rows('SELECT `key`, `value` FROM settings WHERE salon_id=:salonId',{salonId:req.salon.id}) : [];
     const cfg = Object.fromEntries(settingsRows.map(row => [row.key, row.value]));
     const environmentOverrides = {
       meta_whatsapp_token: process.env.META_WHATSAPP_TOKEN,
@@ -72,8 +81,10 @@ app.use(async (req, res, next) => {
     };
     for (const [key, value] of Object.entries(environmentOverrides)) if (value) cfg[key] = value;
     cfg.get = (key, fallback = '') => cfg[key] ?? fallback;
+    if(req.salon)cfg.salon_slug=req.salon.slug;
     res.locals.cfg = cfg;
     req.settings = cfg;
+    res.locals.salon_url = req.salon ? `?salon=${encodeURIComponent(req.salon.slug)}` : '';
     next();
   } catch (error) { next(error); }
 });

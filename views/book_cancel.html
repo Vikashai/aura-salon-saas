@@ -50,9 +50,9 @@
   <form method="POST">
     <button type="submit" class="btn-cancel">Yes, cancel this appointment</button>
   </form>
-  <a href="/book/success/{{appt.booking_token}}" class="btn full ghost" style="text-align:center;display:block;margin-top:10px">Go back</a>
+  <a href="/book/success/{{appt.booking_token}}?salon={{cfg.salon_slug}}" class="btn full ghost" style="text-align:center;display:block;margin-top:10px">Go back</a>
 
 {% endif %}
 
-<a href="/book" class="btn primary full" style="margin-top:16px;display:block;text-align:center">Book a new appointment →</a>
+<a href="/book?salon={{cfg.salon_slug}}" class="btn primary full" style="margin-top:16px;display:block;text-align:center">Book a new appointment →</a>
 {% endblock %}

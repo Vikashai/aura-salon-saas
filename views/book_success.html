@@ -42,7 +42,7 @@
   <div class="detail-row"><span>Stylist</span><b>{{appt.staff_name or 'Any Available'}}</b></div>
   <div class="detail-row"><span>Your name</span><b>{{appt.customer_name}}</b></div>
   <div class="amount-box"><span>Estimated amount</span><strong>{{appt.amount|money}}</strong></div>
-  <div class="cancel-area"><a href="/book/cancel/{{appt.booking_token}}">Cancel this service</a></div>
+  <div class="cancel-area"><a href="/book/cancel/{{appt.booking_token}}?salon={{salon.slug}}">Cancel this service</a></div>
 </div>
 {% endfor %}
 
@@ -57,5 +57,5 @@
 <p style="text-align:center;font-size:13px;color:#737970">💬 A WhatsApp message has been sent to your number</p>
 {% endif %}
 
-<a class="new-booking" href="/book">Book another appointment →</a>
+<a class="new-booking" href="/book?salon={{salon.slug}}">Book another appointment →</a>
 {% endblock %}

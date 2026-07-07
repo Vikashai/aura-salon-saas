@@ -105,7 +105,7 @@ function bookingValues(settings, appointment, type) {
     const base = (settings.base_url || process.env.APP_BASE_URL || '').replace(/\/$/, '');
     return [appointment.customer_name, appointment.appointment_id, appointment.service_name,
       appointment.appointment_date, time, staff, `Rs ${Number(appointment.amount || 0).toLocaleString('en-IN')}`,
-      base ? `${base}/book/cancel/${appointment.booking_token}` : '-'];
+      base ? `${base}/book/cancel/${appointment.booking_token}${settings.salon_slug?`?salon=${encodeURIComponent(settings.salon_slug)}`:''}` : '-'];
   }
   if (type === 'reminder') return [appointment.customer_name, appointment.service_name, appointment.appointment_date, time, staff];
   return [appointment.customer_name, appointment.service_name, appointment.appointment_date, time];

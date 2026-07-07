@@ -26,6 +26,7 @@ input:focus{border-color:#a6b856;box-shadow:0 0 0 3px #eaf7b5}
   <p class="sub">Sign in to your salon dashboard</p>
   {% for cat,msg in flashes %}<div class="toast {{cat}}">{{msg}}</div>{% endfor %}
   <form method="POST">
+    <label>Salon workspace<input name="salon" type="text" required value="{{salon_slug}}" placeholder="your-salon"></label>
     <label>Username<input name="username" type="text" required autofocus placeholder="admin"></label>
     <label>Password<input name="password" type="password" required placeholder="••••••••"></label>
     <label class="remember"><input type="checkbox" name="remember"> Remember me for 30 days</label>

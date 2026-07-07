@@ -23,26 +23,28 @@ function referralConfig(settings) {
   return { referrer_credit:Number(settings.referral_referrer_credit ?? 200), referee_discount:Number(settings.referral_referee_discount ?? 100) };
 }
 
-async function adjustReferralCredit(connection, customerId, amount, type, description, refereeId = null, saleId = null) {
-  await connection.execute('UPDATE customers SET referral_credit=GREATEST(referral_credit+?,0) WHERE id=?', [amount, customerId]);
-  const [[customer]] = await connection.execute('SELECT referral_credit FROM customers WHERE id=?', [customerId]);
-  await connection.execute('INSERT INTO referral_credit_transactions(customer_id,referee_id,sale_id,type,amount,balance_after,description) VALUES(?,?,?,?,?,?,?)',[customerId,refereeId,saleId,type,amount,customer.referral_credit,description]);
+async function adjustReferralCredit(connection,salonId,customerId,amount,type,description,refereeId=null,saleId=null) {
+  await connection.execute('UPDATE customers SET referral_credit=GREATEST(referral_credit+?,0) WHERE id=? AND salon_id=?',[amount,customerId,salonId]);
+  const [[customer]]=await connection.execute('SELECT referral_credit FROM customers WHERE id=? AND salon_id=?',[customerId,salonId]);
+  if(!customer)throw new Error('Customer is outside the active salon');
+  await connection.execute('INSERT INTO referral_credit_transactions(salon_id,customer_id,referee_id,sale_id,type,amount,balance_after,description) VALUES(?,?,?,?,?,?,?,?)',[salonId,customerId,refereeId,saleId,type,amount,customer.referral_credit,description]);
 }
 
-async function awardPoints(connection, customerId, points, type, description, refType = null, refId = null) {
-  await connection.execute('UPDATE customers SET loyalty_points=loyalty_points+? WHERE id=?', [points, customerId]);
-  const [[customer]] = await connection.execute('SELECT loyalty_points FROM customers WHERE id=?', [customerId]);
+async function awardPoints(connection,salonId,customerId,points,type,description,refType=null,refId=null) {
+  await connection.execute('UPDATE customers SET loyalty_points=loyalty_points+? WHERE id=? AND salon_id=?',[points,customerId,salonId]);
+  const [[customer]]=await connection.execute('SELECT loyalty_points FROM customers WHERE id=? AND salon_id=?',[customerId,salonId]);
+  if(!customer)throw new Error('Customer is outside the active salon');
   await connection.execute(
-    'INSERT INTO loyalty_transactions(customer_id,type,points,balance_after,description,ref_type,ref_id) VALUES(?,?,?,?,?,?,?)',
-    [customerId, type, points, customer.loyalty_points, description, refType, refId],
+    'INSERT INTO loyalty_transactions(salon_id,customer_id,type,points,balance_after,description,ref_type,ref_id) VALUES(?,?,?,?,?,?,?,?)',
+    [salonId,customerId,type,points,customer.loyalty_points,description,refType,refId],
   );
   return customer.loyalty_points;
 }
 
-async function referralCode() {
+async function referralCode(salonId) {
   for (;;) {
     const code = crypto.randomBytes(3).toString('hex').toUpperCase();
-    if (!await db.one('SELECT id FROM customers WHERE referral_code=:code', { code })) return code;
+    if(!await db.one('SELECT id FROM customers WHERE salon_id=:salonId AND referral_code=:code',{salonId,code}))return code;
   }
 }
 

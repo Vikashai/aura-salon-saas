@@ -182,7 +182,7 @@ async function fetchSlots() {
   if (!services.length) { area.innerHTML = '<p class="slot-loading">Select a service and date to see available slots.</p>'; updateHint(); return; }
   if (!date) { area.innerHTML = '<p class="slot-loading">Pick a date to see available slots.</p>'; return; }
   area.innerHTML = '<p class="slot-loading">Loading slots…</p>';
-  const params = new URLSearchParams({ date, staff_id: staff });
+  const params = new URLSearchParams({ date, staff_id: staff, salon: '{{salon.slug}}' });
   services.forEach(s => params.append('service_id', s.id));
   const res   = await fetch(`/api/slots?${params}`);
   const slots = await res.json();

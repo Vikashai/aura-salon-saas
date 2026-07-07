@@ -23,4 +23,12 @@ Platform administrators are stored separately from salon users. They approve, su
 4. Tenant URLs and public booking: resolve salon from the URL and apply salon-specific branding, availability and notifications.
 5. Commercial layer: plans, trials, subscriptions, limits, invoices and platform reporting.
 
-The current commit implements the first control-plane foundation. Tenant isolation must be completed before accepting real salons.
+## Current implementation status
+
+- Control plane, applications, approval, suspension and owner provisioning are implemented.
+- Tenant ownership is implemented across operational tables and route queries.
+- Existing single-salon data is assigned to the configured default salon during migration.
+- A runtime database guard rejects ordinary queries that touch tenant tables without `salon_id`.
+- Public booking uses `?salon={slug}` during the path-based first release.
+
+Subscription plans, billing limits, custom domains and production notification credentials remain later phases. A staging deployment and migration rehearsal are still required before accepting real salons.
