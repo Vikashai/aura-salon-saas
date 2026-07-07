@@ -35,6 +35,20 @@ app.set('view engine', 'html');
 app.use('/static', express.static(path.join(__dirname, '..', 'public')));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.json({ limit: '1mb' }));
+
+let databaseInitializationError = null;
+const databaseReady = process.env.AUTO_INIT_DB === 'true'
+  ? require('../scripts/init-db').main().catch(error => {
+    databaseInitializationError = error;
+    console.error('Database initialization failed:', error);
+  })
+  : Promise.resolve();
+
+app.use(async (_req, _res, next) => {
+  await databaseReady;
+  return databaseInitializationError ? next(databaseInitializationError) : next();
+});
+
 app.use((req, res, next) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) || req.path.startsWith('/tasks/')) return next();
   const source = req.get('origin') || req.get('referer');
@@ -107,10 +121,8 @@ app.use((error, req, res, _next) => {
 const port = Number(process.env.PORT || 3000);
 if (require.main === module) {
   const start = async () => {
-    if (process.env.AUTO_INIT_DB === 'true') {
-      const { main: initializeDatabase } = require('../scripts/init-db');
-      await initializeDatabase();
-    }
+    await databaseReady;
+    if (databaseInitializationError) throw databaseInitializationError;
     app.listen(port, '0.0.0.0', () => console.log(`Aura Salon OS running on port ${port}`));
   };
   start().catch(error => {
