@@ -24,6 +24,13 @@ env.addFilter('int', value => Number.parseInt(value || 0, 10));
 env.addFilter('float', value => Number.parseFloat(value || 0));
 env.addFilter('trim', value => String(value || '').trim());
 env.addFilter('dateonly', value => value ? isoDate(new Date(value)) : '');
+function brandContrast(value) {
+  const match=String(value||'').match(/^#([0-9a-f]{6})$/i);if(!match)return'#20211f';
+  const hex=match[1],channels=[0,2,4].map(index=>parseInt(hex.slice(index,index+2),16)/255).map(channel=>channel<=.03928?channel/12.92:((channel+.055)/1.055)**2.4);
+  return .2126*channels[0]+.7152*channels[1]+.0722*channels[2]>.42?'#20211f':'#ffffff';
+}
+env.addFilter('brand_contrast',brandContrast);
+env.addFilter('brand_on_dark',value=>brandContrast(value)==='#ffffff'?'#ffffff':String(value||'#dfff3f'));
 app.set('view engine', 'html');
 app.use('/static', express.static(path.join(__dirname, '..', 'public')));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));

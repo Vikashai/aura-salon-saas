@@ -12,6 +12,8 @@ env.addFilter('fmt_time', value => value || '');
 env.addFilter('mmdd', value => value || '—');
 env.addFilter('int', value => Number.parseInt(value || 0, 10));
 env.addFilter('trim', value => String(value || '').trim());
+env.addFilter('brand_contrast', value => String(value||'').toLowerCase()==='#20211f'?'#ffffff':'#20211f');
+env.addFilter('brand_on_dark', value => String(value||'').toLowerCase()==='#20211f'?'#ffffff':String(value||'#dfff3f'));
 
 for (const file of fs.readdirSync(views).filter(name => name.endsWith('.html'))) {
   test(`template parses: ${file}`, () => {
