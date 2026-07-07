@@ -1,0 +1,89 @@
+'use strict';
+
+require('dotenv').config();
+const fs = require('node:fs');
+const path = require('node:path');
+const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
+
+const defaults = {
+  salon_name: 'Aura Salon Studio', invoice_prefix: 'INV', gst_number: '', tax_enabled: '1',
+  business_open: '09:00', business_close: '20:00', slot_interval: '30', salon_phone: '', salon_email: '',
+  smtp_host: 'smtp.gmail.com', smtp_port: '587', smtp_user: '', smtp_pass: '', smtp_from: '',
+  whatsapp_provider: 'meta', meta_whatsapp_token: '', meta_phone_number_id: '', meta_api_version: 'v25.0',
+  meta_template_language: 'en_US', meta_template_confirmation: '', meta_template_reminder: '',
+  meta_template_cancellation: '', meta_template_welcome: '', meta_template_birthday: '',
+  meta_template_anniversary: '', twilio_sid: '', twilio_token: '',
+  twilio_whatsapp_from: 'whatsapp:+14155238886', base_url: process.env.APP_BASE_URL || 'http://localhost:3000',
+  loyalty_enabled: '1', loyalty_earn_rate: '2', loyalty_redeem_rate: '100', loyalty_min_redeem: '500',
+  loyalty_max_redeem_pct: '30', loyalty_expiry_months: '12', loyalty_referral_referrer: '500',
+  loyalty_referral_referee: '200', loyalty_earn_on_services: '1', loyalty_earn_on_products: '1',
+  referral_referrer_credit: '200', referral_referee_discount: '100',
+  msg_welcome: 'Hi {name}! Welcome to {salon_name} 🌸 We are so glad to have you.',
+  msg_birthday: 'Happy Birthday {name}! 🎂🎉 The team at {salon_name} wishes you a fabulous day.',
+  msg_anniversary: 'Happy Anniversary {name}! 💕 With love from the team at {salon_name}.',
+};
+
+async function main() {
+  const connection = await mysql.createConnection({
+    host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 3306), database: process.env.DB_NAME,
+    user: process.env.DB_USER, password: process.env.DB_PASSWORD, multipleStatements: true, charset: 'utf8mb4',
+  });
+  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  await connection.query(schema);
+  const [discountNoteColumn] = await connection.query("SHOW COLUMNS FROM sales LIKE 'discount_note'");
+  if (!discountNoteColumn.length) await connection.query('ALTER TABLE sales ADD COLUMN discount_note VARCHAR(255) NULL AFTER discount');
+  await connection.query('ALTER TABLE sales MODIFY COLUMN payment_mode VARCHAR(120) NULL');
+  const [capacityPoolColumn] = await connection.query("SHOW COLUMNS FROM services LIKE 'capacity_pool_id'");
+  if (!capacityPoolColumn.length) await connection.query('ALTER TABLE services ADD COLUMN capacity_pool_id INT UNSIGNED NULL, ADD CONSTRAINT fk_service_capacity_pool FOREIGN KEY (capacity_pool_id) REFERENCES capacity_pools(id) ON DELETE SET NULL');
+  const [groupTokenColumn] = await connection.query("SHOW COLUMNS FROM appointments LIKE 'group_token'");
+  if (!groupTokenColumn.length) await connection.query('ALTER TABLE appointments ADD COLUMN group_token VARCHAR(64) NULL AFTER cancel_reason');
+  const expenseColumns = [
+    ['subcategory','VARCHAR(120) NULL AFTER category'], ['employee_name','VARCHAR(150) NULL AFTER subcategory'],
+    ['expense_group','VARCHAR(64) NULL AFTER employee_name'], ['reference_no','VARCHAR(120) NULL AFTER paid_to'],
+    ['period_start','DATE NULL AFTER reference_no'], ['period_end','DATE NULL AFTER period_start'], ['due_date','DATE NULL AFTER period_end'],
+  ];
+  for (const [column, definition] of expenseColumns) {
+    const [found] = await connection.query(`SHOW COLUMNS FROM expenses LIKE '${column}'`);
+    if (!found.length) await connection.query(`ALTER TABLE expenses ADD COLUMN ${column} ${definition}`);
+  }
+  const referralColumns = [
+    ['customers','referral_credit','DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER referral_code'],
+    ['sales','referrer_id','INT UNSIGNED NULL AFTER loyalty_discount'],
+    ['sales','referral_discount','DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER referrer_id'],
+    ['sales','referral_credit_used','DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER referral_discount'],
+  ];
+  for (const [table, column, definition] of referralColumns) {
+    const [found] = await connection.query(`SHOW COLUMNS FROM ${table} LIKE '${column}'`);
+    if (!found.length) await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+  const userColumns = [
+    ['staff_id','INT UNSIGNED NULL AFTER status'], ['permissions','JSON NULL AFTER staff_id'],
+    ['force_password_change','TINYINT(1) NOT NULL DEFAULT 0 AFTER permissions'],
+    ['last_login','DATETIME NULL AFTER force_password_change'], ['last_activity','DATETIME NULL AFTER last_login'],
+    ['created_by','INT UNSIGNED NULL AFTER last_activity'], ['created_at','TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER created_by'],
+  ];
+  for (const [column, definition] of userColumns) {
+    const [found] = await connection.query(`SHOW COLUMNS FROM users LIKE '${column}'`);
+    if (!found.length) await connection.query(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+  }
+  await connection.query("UPDATE users SET role='owner' WHERE LOWER(role) IN ('owner','admin') AND id=(SELECT first_id FROM (SELECT MIN(id) first_id FROM users) first_user)");
+  const [[{ count: poolCount }]] = await connection.query('SELECT COUNT(*) AS count FROM capacity_pools');
+  if (!poolCount) await connection.execute("INSERT INTO capacity_pools (name, seats, is_default) VALUES ('General', 1, 1)");
+  for (const [key, value] of Object.entries(defaults)) {
+    await connection.execute('INSERT IGNORE INTO settings (`key`, `value`) VALUES (?, ?)', [key, value]);
+  }
+  const [[{ count }]] = await connection.query('SELECT COUNT(*) AS count FROM users');
+  if (!count) {
+    if (!process.env.INITIAL_ADMIN_PASSWORD) throw new Error('INITIAL_ADMIN_PASSWORD is required for the first admin account.');
+    const passwordHash = await bcrypt.hash(process.env.INITIAL_ADMIN_PASSWORD, 12);
+    await connection.execute(
+      "INSERT INTO users (name, username, password_hash, role, status) VALUES ('Admin', 'admin', ?, 'owner', 'Active')",
+      [passwordHash],
+    );
+  }
+  await connection.end();
+  console.log('Database schema and default settings are ready.');
+}
+
+main().catch(error => { console.error(error); process.exitCode = 1; });

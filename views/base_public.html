@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Book an Appointment{% endblock %} · {{cfg.get('salon_name','Aura Salon')}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f6f1;font-family:'DM Sans',sans-serif;font-size:14px;color:#20211f}
+a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
+.pub-header{background:#20211f;color:#fff;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between}
+.pub-brand{display:flex;align-items:center;gap:10px}.pub-brand-mark{width:30px;height:30px;background:#dfff3f;border-radius:50%;display:grid;place-items:center;font-size:16px}
+.pub-brand span{font:700 16px 'Manrope';letter-spacing:2.5px}
+.pub-phone{font-size:13px;color:#aeb2ac}
+.pub-content{max-width:680px;margin:0 auto;padding:36px 20px 80px}
+.pub-footer{background:#20211f;color:#6b6f67;text-align:center;padding:24px;font-size:12px}
+.btn{min-height:44px;padding:11px 20px;border-radius:12px;border:1px solid #dfe2db;display:inline-flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;background:white;font-size:14px}
+.btn.primary{background:#20211f;border-color:#20211f;color:#dfff3f}
+.btn.full{width:100%;justify-content:center;margin-top:8px}
+input,select,textarea{border:1px solid #dfe2db;border-radius:10px;padding:11px 13px;background:white;color:#20211f;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:#a6b856;box-shadow:0 0 0 3px #eaf7b5}
+label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600;color:#5e635d}
+.toast{padding:14px 16px;border-radius:12px;margin-bottom:16px;font-weight:600}
+.toast.success{background:#e5f4d8;color:#3d711e}.toast.error{background:#fde8e7;color:#9c2d27}
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="pub-header">
+  <div class="pub-brand"><div class="pub-brand-mark">✦</div><span>{{cfg.get('salon_name','AURA')|upper}}</span></div>
+  {% if cfg.get('salon_phone') or cfg.get('contact') %}<span class="pub-phone">📞 {{cfg.get('salon_phone') or cfg.get('contact','')}}</span>{% endif %}
+</header>
+<div class="pub-content">
+  {% for cat,msg in flashes %}<div class="toast {{cat}}">{{msg}}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</div>
+<footer class="pub-footer">© {{cfg.get('salon_name','Aura Salon')}} · Powered by Aura Salon OS</footer>
+</body></html>

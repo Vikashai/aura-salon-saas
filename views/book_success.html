@@ -1,0 +1,61 @@
+{% extends 'base_public.html' %}
+{% block title %}Booking Confirmed{% endblock %}
+{% block head %}
+<style>
+.success-wrap{text-align:center;padding:40px 0 20px}
+.success-icon{width:72px;height:72px;background:#dfff3f;border-radius:50%;display:grid;place-items:center;font-size:36px;margin:0 auto 20px}
+.success-wrap h1{font:700 28px 'Manrope';margin:0 0 8px}.success-wrap p{color:#737970}
+.appt-card{background:#fff;border:1px solid #e5e8e1;border-radius:20px;padding:28px;margin:24px 0}
+.appt-card h2{font:700 16px 'Manrope';margin:0 0 18px;color:#737970;letter-spacing:.5px;text-transform:uppercase;font-size:11px}
+.appt-card+.appt-card{margin-top:16px}
+.detail-row{display:flex;padding:11px 0;border-bottom:1px solid #eef0eb}
+.detail-row:last-child{border:0}
+.detail-row span{color:#737970;width:120px;flex-shrink:0;font-size:13px}.detail-row b{font-weight:600}
+.amount-box{background:#dfff3f;border-radius:12px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;margin-top:18px}
+.amount-box span{font-size:13px;color:#3a3d35}.amount-box strong{font-size:20px;color:#20211f}
+.status-pending{background:#fff0d1;color:#8b5d00;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;text-align:center;margin-bottom:16px}
+.cancel-area{text-align:center;margin-top:12px}
+.cancel-area a{color:#9a9e97;font-size:12px;text-decoration:underline}
+.new-booking{display:block;text-align:center;margin-top:12px;padding:14px;background:#20211f;color:#dfff3f;border-radius:12px;font-weight:700}
+</style>
+{% endblock %}
+{% block content %}
+<div class="success-wrap">
+  <div class="success-icon">✦</div>
+  <h1>Booking Received!</h1>
+  <p>We've received your appointment{{'' if appts|length==1 else 's'}}. The salon will confirm shortly.</p>
+</div>
+
+{% if appts|length %}
+<div class="status-pending">
+  ⏳ Status: {{appts[0].status|replace('_',' ')|title}} — you'll be notified once confirmed
+</div>
+{% endif %}
+
+{% for appt in appts %}
+<div class="appt-card">
+  <h2>{{'Your booking details' if appts|length==1 else 'Service ' ~ loop.index ~ ' of ' ~ appts|length}}</h2>
+  <div class="detail-row"><span>Booking ID</span><b>{{appt.appointment_id}}</b></div>
+  <div class="detail-row"><span>Service</span><b>{{appt.service_name}}</b></div>
+  <div class="detail-row"><span>Date</span><b>{{appt.appointment_date}}</b></div>
+  <div class="detail-row"><span>Time</span><b>{{appt.appointment_time|fmt_time}}</b></div>
+  <div class="detail-row"><span>Stylist</span><b>{{appt.staff_name or 'Any Available'}}</b></div>
+  <div class="detail-row"><span>Your name</span><b>{{appt.customer_name}}</b></div>
+  <div class="amount-box"><span>Estimated amount</span><strong>{{appt.amount|money}}</strong></div>
+  <div class="cancel-area"><a href="/book/cancel/{{appt.booking_token}}">Cancel this service</a></div>
+</div>
+{% endfor %}
+
+{% if appts|length > 1 %}
+<div class="amount-box" style="margin:24px 0"><span>Total estimated amount</span><strong>{{total|money}}</strong></div>
+{% endif %}
+
+{% if appts[0].notify_email and appts[0].customer_email %}
+<p style="text-align:center;font-size:13px;color:#737970">📧 A confirmation has been sent to <b>{{appts[0].customer_email}}</b></p>
+{% endif %}
+{% if appts[0].notify_whatsapp %}
+<p style="text-align:center;font-size:13px;color:#737970">💬 A WhatsApp message has been sent to your number</p>
+{% endif %}
+
+<a class="new-booking" href="/book">Book another appointment →</a>
+{% endblock %}

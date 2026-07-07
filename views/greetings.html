@@ -1,0 +1,164 @@
+{% extends 'base.html' %}{% block title %}Greetings — Aura Salon{% endblock %}{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">CUSTOMER CARE</p>
+    <h1>Greetings &amp; messages</h1>
+    <p>Send birthday wishes, anniversary greetings and welcome messages via WhatsApp.</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    {% if (data.get('whatsapp_provider','meta') == 'meta' and data.get('meta_whatsapp_token') and data.get('meta_phone_number_id')) or (data.get('whatsapp_provider') == 'twilio' and data.get('twilio_sid')) %}
+      <span class="badge active" style="font-size:13px;padding:6px 14px">● WhatsApp connected</span>
+    {% else %}
+      <a class="btn ghost compact" href="/settings#whatsapp">⚠ Configure WhatsApp first</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stat-strip">
+  <div><small>Birthdays today</small><strong style="{% if birthdays_today %}color:#d9ff43{% endif %}">{{birthdays_today|length}}</strong></div>
+  <div><small>Anniversaries today</small><strong style="{% if anniversaries_today %}color:#d9ff43{% endif %}">{{anniversaries_today|length}}</strong></div>
+  <div><small>Birthdays this week</small><strong>{{upcoming_birthdays|length}}</strong></div>
+  <div><small>Anniversaries this week</small><strong>{{upcoming_anniversaries|length}}</strong></div>
+</div>
+
+{# ── TODAY ────────────────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h3>🎂 Birthdays today</h3><p>{{today_display}}</p></div>
+      {% if birthdays_today %}
+      <form method="post" action="/greetings/send-all">
+        <input type="hidden" name="msg_type" value="birthday">
+        {% for c in birthdays_today %}<input type="hidden" name="customer_ids" value="{{c.id}}">{% endfor %}
+        <button class="btn primary compact" type="submit">Send all wishes</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if birthdays_today %}
+    <div>
+      {% for c in birthdays_today %}
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line)">
+        <div class="profile-avatar" style="width:36px;height:36px;font-size:14px;flex-shrink:0">{{c.name|truncate(1, true, '')}}</div>
+        <div style="flex:1;min-width:0">
+          <a href="/customers/{{c.id}}" style="font-weight:700;font-size:14px">{{c.name}}</a>
+          <small style="display:block;color:#737970">{{c.mobile}} · turns {{current_year - (c.dob|truncate(4, true, '')|int)}} today</small>
+        </div>
+        <form method="post" action="/greetings/send" style="flex-shrink:0">
+          <input type="hidden" name="customer_id" value="{{c.id}}">
+          <input type="hidden" name="msg_type" value="birthday">
+          <button class="btn ghost compact" type="submit">Send 🎉</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty" style="padding:32px 18px">No birthdays today.</div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h3>💕 Anniversaries today</h3><p>{{today_display}}</p></div>
+      {% if anniversaries_today %}
+      <form method="post" action="/greetings/send-all">
+        <input type="hidden" name="msg_type" value="anniversary">
+        {% for c in anniversaries_today %}<input type="hidden" name="customer_ids" value="{{c.id}}">{% endfor %}
+        <button class="btn primary compact" type="submit">Send all wishes</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if anniversaries_today %}
+    <div>
+      {% for c in anniversaries_today %}
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line)">
+        <div class="profile-avatar" style="width:36px;height:36px;font-size:14px;flex-shrink:0">{{c.name|truncate(1, true, '')}}</div>
+        <div style="flex:1;min-width:0">
+          <a href="/customers/{{c.id}}" style="font-weight:700;font-size:14px">{{c.name}}</a>
+          <small style="display:block;color:#737970">{{c.mobile}}</small>
+        </div>
+        <form method="post" action="/greetings/send" style="flex-shrink:0">
+          <input type="hidden" name="customer_id" value="{{c.id}}">
+          <input type="hidden" name="msg_type" value="anniversary">
+          <button class="btn ghost compact" type="submit">Send 💌</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty" style="padding:32px 18px">No anniversaries today.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ── UPCOMING 7 DAYS ──────────────────────────────────────────────── #}
+{% if upcoming_birthdays or upcoming_anniversaries %}
+<div class="panel" style="margin-bottom:16px">
+  <div class="panel-head"><div><h3>Coming up this week</h3><p>Birthdays and anniversaries in the next 7 days</p></div></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Customer</th><th>Occasion</th><th>Mobile</th><th></th></tr></thead>
+      <tbody>
+        {% for c in upcoming_birthdays %}
+        <tr>
+          <td><strong>{{c.dob|mmdd}}</strong></td>
+          <td><a href="/customers/{{c.id}}">{{c.name}}</a></td>
+          <td><span class="badge earn">Birthday</span></td>
+          <td style="color:#737970">{{c.mobile}}</td>
+          <td>
+            <form method="post" action="/greetings/send" style="display:inline">
+              <input type="hidden" name="customer_id" value="{{c.id}}">
+              <input type="hidden" name="msg_type" value="birthday">
+              <button class="btn ghost compact" type="submit">Send early</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        {% for c in upcoming_anniversaries %}
+        <tr>
+          <td><strong>{{c.anniversary|mmdd}}</strong></td>
+          <td><a href="/customers/{{c.id}}">{{c.name}}</a></td>
+          <td><span class="badge welcome-bonus">Anniversary</span></td>
+          <td style="color:#737970">{{c.mobile}}</td>
+          <td>
+            <form method="post" action="/greetings/send" style="display:inline">
+              <input type="hidden" name="customer_id" value="{{c.id}}">
+              <input type="hidden" name="msg_type" value="anniversary">
+              <button class="btn ghost compact" type="submit">Send early</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ── MESSAGE TEMPLATES ────────────────────────────────────────────── #}
+<div class="panel">
+  <div class="panel-head"><div><h3>Message templates</h3><p>Use <code style="background:#f5f6f1;padding:2px 6px;border-radius:4px;font-size:12px">{name}</code> and <code style="background:#f5f6f1;padding:2px 6px;border-radius:4px;font-size:12px">{salon_name}</code> as placeholders</p></div></div>
+  <form method="post" action="/greetings/templates">
+    <div style="padding:18px;display:grid;gap:20px">
+
+      <label style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-weight:700;font-size:13px">🌸 Welcome message <small style="font-weight:400;color:#737970">(auto-sent when a new customer is added)</small></span>
+        <textarea name="msg_welcome" rows="3" style="resize:vertical;font-size:13px">{{data.get('msg_welcome','')}}</textarea>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-weight:700;font-size:13px">🎂 Birthday message</span>
+        <textarea name="msg_birthday" rows="3" style="resize:vertical;font-size:13px">{{data.get('msg_birthday','')}}</textarea>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-weight:700;font-size:13px">💕 Anniversary message</span>
+        <textarea name="msg_anniversary" rows="3" style="resize:vertical;font-size:13px">{{data.get('msg_anniversary','')}}</textarea>
+      </label>
+
+      <div><button class="btn primary" type="submit">Save templates</button></div>
+    </div>
+  </form>
+</div>
+{% endblock %}

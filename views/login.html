@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · Aura Salon OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#20211f;display:grid;place-items:center;font-family:'DM Sans',sans-serif;font-size:14px;color:#20211f}
+.card{background:#fff;border-radius:26px;padding:44px 40px;width:min(420px,95vw);box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:30px}.brand-mark{width:34px;height:34px;background:#dfff3f;border-radius:50%;display:grid;place-items:center;font-size:20px}
+.brand span{font:700 18px 'Manrope';letter-spacing:3px;color:#20211f}h1{font:700 26px 'Manrope';margin:0 0 6px;letter-spacing:-0.5px}
+p.sub{color:#737970;margin:0 0 28px;font-size:13px}
+label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600;color:#5e635d;margin-bottom:16px}
+input[type=text],input[type=password]{border:1px solid #dfe2db;border-radius:10px;padding:12px 14px;font:inherit;font-size:14px;color:#20211f;outline:none;width:100%;background:#fff}
+input:focus{border-color:#a6b856;box-shadow:0 0 0 3px #eaf7b5}
+.remember{flex-direction:row;align-items:center;gap:8px;font-size:13px;font-weight:400;color:#737970;cursor:pointer}
+.remember input{width:16px;height:16px;accent-color:#20211f}
+.btn-primary{width:100%;background:#20211f;color:#dfff3f;border:0;border-radius:12px;padding:14px;font:700 14px 'DM Sans';cursor:pointer;margin-top:8px;letter-spacing:.3px;transition:opacity .15s}
+.btn-primary:hover{opacity:.85}
+.toast{background:#fde8e7;color:#9c2d27;padding:12px 16px;border-radius:10px;margin-bottom:18px;font-weight:600;font-size:13px}
+.toast.info{background:#e5ebfa;color:#34528e}
+.hint{margin-top:22px;padding-top:18px;border-top:1px solid #eef0eb;font-size:12px;color:#9a9e97;text-align:center;line-height:1.6}
+.hint b{color:#5e635d}
+</style></head>
+<body>
+<div class="card">
+  <div class="brand"><div class="brand-mark">✦</div><span>AURA</span></div>
+  <h1>Welcome back</h1>
+  <p class="sub">Sign in to your salon dashboard</p>
+  {% for cat,msg in flashes %}<div class="toast {{cat}}">{{msg}}</div>{% endfor %}
+  <form method="POST">
+    <label>Username<input name="username" type="text" required autofocus placeholder="admin"></label>
+    <label>Password<input name="password" type="password" required placeholder="••••••••"></label>
+    <label class="remember"><input type="checkbox" name="remember"> Remember me for 30 days</label>
+    <button type="submit" class="btn-primary">Sign in →</button>
+  </form>
+  <p class="hint">Use the administrator password configured during deployment.</p>
+</div>
+</body></html>

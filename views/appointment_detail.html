@@ -1,0 +1,124 @@
+{% extends 'base.html' %}{% block content %}
+<a class="back" href="/appointments">← All appointments</a>
+
+<div class="profile-hero" style="margin-bottom:16px">
+  <div class="profile-main">
+    <div class="profile-avatar" style="font-size:22px">📋</div>
+    <div>
+      <div class="profile-title">
+        <h1>{{appt.appointment_id}}</h1>
+        <span class="badge {{appt.status|replace('_','-')}}" style="font-size:12px">{{appt.status|replace('_',' ')|title}}</span>
+        <span class="tag">{{appt.source}}</span>
+      </div>
+      <p style="color:#6c746c;margin:6px 0 0">Booked {{appt.created_at|truncate(10, true, '')}} · {{appt.service_name}}</p>
+    </div>
+    <div class="profile-actions">
+      {% if appt.status not in ('cancelled','completed','no_show') %}
+      <form method="POST" action="/appointments/{{appt.id}}/send-reminder" style="display:inline">
+        <button class="btn ghost compact">📲 Send reminder</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="stat-strip" style="margin-bottom:16px">
+  <div><small>Date</small><strong>{{appt.appointment_date}}</strong></div>
+  <div><small>Time</small><strong>{{appt.appointment_time|fmt_time}}</strong></div>
+  <div><small>Duration</small><strong>{{appt.duration_mins}} min</strong></div>
+  <div><small>Est. amount</small><strong>{{appt.amount|money}}</strong></div>
+</div>
+
+<div class="profile-grid">
+  <div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="detail-list">
+        <h3 style="margin:0 0 16px">Appointment details</h3>
+        <div><span>Service</span><strong>{{appt.service_name}}</strong></div>
+        <div><span>Stylist</span><strong>{{appt.staff_name or 'Any Available'}}</strong></div>
+        <div><span>Customer</span><strong>{{appt.customer_name}}</strong></div>
+        <div><span>Mobile</span><strong>{{appt.customer_mobile}}</strong></div>
+        {% if appt.customer_email %}<div><span>Email</span><strong>{{appt.customer_email}}</strong></div>{% endif %}
+        {% if appt.notes %}<div><span>Notes</span><strong>{{appt.notes}}</strong></div>{% endif %}
+        {% if appt.cancel_reason %}<div><span>Cancel reason</span><strong>{{appt.cancel_reason}}</strong></div>{% endif %}
+      </div>
+    </div>
+
+    {% if group|length %}
+    <div class="panel" style="margin-bottom:16px">
+      <h3 style="margin:0 0 16px">Other services in the same visit</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Service</th><th>Time</th><th class="right">Amount</th><th></th></tr></thead>
+        <tbody>
+        {% for g in group %}
+        <tr>
+          <td>{{g.service_name}}</td>
+          <td>{{g.appointment_time|fmt_time}}</td>
+          <td class="right"><strong>{{g.amount|money}}</strong></td>
+          <td><a href="/appointments/{{g.id}}" class="btn ghost compact">View</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <h3 style="margin:0 0 16px">Notifications</h3>
+      <div class="detail-list">
+        <div><span>Email</span><strong>{% if appt.notify_email %}✓ Enabled{% else %}✗ Disabled{% endif %}</strong></div>
+        <div><span>WhatsApp</span><strong>{% if appt.notify_whatsapp %}✓ Enabled{% else %}✗ Disabled{% endif %}</strong></div>
+        <div><span>Reminder sent</span><strong>{% if appt.reminder_sent %}Yes{% else %}Not yet{% endif %}</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    {% if appt.status not in ('cancelled','completed','no_show') %}
+    <div class="panel" style="margin-bottom:16px">
+      <h3 style="margin:0 0 16px">Update status</h3>
+
+      {% if appt.status == 'pending' %}
+      <form method="POST" action="/appointments/{{appt.id}}/status">
+        <input type="hidden" name="status" value="confirmed">
+        <button class="btn primary full" style="background:#3d711e;border-color:#3d711e;color:#fff">✓ Confirm appointment</button>
+      </form>
+      {% endif %}
+
+      {% if appt.status in ('pending','confirmed') %}
+      <form method="POST" action="/appointments/{{appt.id}}/status" style="margin-top:10px">
+        <input type="hidden" name="status" value="completed">
+        <button class="btn primary full">✓ Mark as completed</button>
+      </form>
+
+      <form method="POST" action="/appointments/{{appt.id}}/status" style="margin-top:10px">
+        <input type="hidden" name="status" value="no_show">
+        <button class="btn full ghost">✗ No show</button>
+      </form>
+
+      <hr style="border:0;border-top:1px solid #eef0eb;margin:16px 0">
+      <form method="POST" action="/appointments/{{appt.id}}/status">
+        <input type="hidden" name="status" value="cancelled">
+        <label style="margin-bottom:10px">Cancellation reason<textarea name="cancel_reason" rows="2" placeholder="Optional reason…"></textarea></label>
+        <button class="btn full" style="background:#fde8e7;border-color:#fde8e7;color:#9c2d27">Cancel appointment</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if appt.status == 'completed' %}
+    <div class="panel" style="margin-bottom:16px">
+      <h3 style="margin:0 0 12px">Convert to bill</h3>
+      <p style="color:#737970;font-size:13px;margin:0 0 14px">Create an invoice for this completed appointment.</p>
+      <a href="/billing/new?prefill_service={{appt.service_name}}&prefill_customer={{appt.customer_id or ''}}" class="btn primary full">＋ Create invoice</a>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <h3 style="margin:0 0 12px">Public booking link</h3>
+      <p style="color:#737970;font-size:13px;margin:0 0 10px">Share this link with the customer to let them cancel or view their booking.</p>
+      <input type="text" value="{{cfg.get('base_url','http://localhost:5000')}}/book/success/{{appt.booking_token}}" readonly onclick="this.select()" style="font-size:11px">
+    </div>
+  </div>
+</div>
+{% endblock %}

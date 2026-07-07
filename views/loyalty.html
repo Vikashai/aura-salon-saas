@@ -1,0 +1,171 @@
+{% extends 'base.html' %}{% block title %}Loyalty Program — Aura Salon{% endblock %}{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">LOYALTY PROGRAM</p>
+    <h1>Loyalty &amp; rewards</h1>
+    <p>Configure rules, track program health and manage member points.</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    {% if cfg.enabled %}<span class="badge active" style="font-size:13px;padding:6px 14px">● Program active</span>
+    {% else %}<span class="badge inactive" style="font-size:13px;padding:6px 14px">● Program disabled</span>{% endif %}
+  </div>
+</div>
+
+<div class="stat-strip">
+  <div><small>Points in circulation</small><strong style="color:#d9ff43">{{stats.pts_in_circulation|int}}</strong></div>
+  <div><small>Points awarded (all time)</small><strong>{{stats.pts_awarded|int}}</strong></div>
+  <div><small>Points redeemed (all time)</small><strong>{{stats.pts_redeemed|int}}</strong></div>
+  <div><small>Discount given via points</small><strong>{{stats.total_discount|money}}</strong></div>
+  <div><small>Active members</small><strong>{{stats.active_members}} <span style="font-weight:400;color:#737970">/ {{stats.total_customers}}</span></strong></div>
+  <div><small>Successful referrals</small><strong>{{stats.total_referrals}}</strong></div>
+</div>
+
+<div class="profile-grid" style="margin-top:0">
+  <div>
+    <form method="post" action="/loyalty/settings">
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-head">
+          <div><h3>Program rules</h3><p>How customers earn and spend points — changes apply on next transaction</p></div>
+          <button class="btn primary compact" type="submit">Save rules</button>
+        </div>
+        <div style="padding:0 18px 20px">
+
+          <label class="switch-row" style="padding:16px 0;border-bottom:1px solid var(--line)">
+            <span><strong>Enable loyalty program</strong><small>Show points on bills and customer profiles</small></span>
+            <input type="checkbox" name="loyalty_enabled" value="1" {% if data.get('loyalty_enabled','1')=='1' %}checked{% endif %}>
+          </label>
+
+          <h4 style="margin:20px 0 14px;font:700 12px/1 'Manrope';text-transform:uppercase;letter-spacing:.6px;color:#737970">Earn &amp; burn rates</h4>
+          <div class="form-grid">
+            <label>Points earned per ₹1 spent
+              <input type="number" name="loyalty_earn_rate" min="0" step="0.5" value="{{data.get('loyalty_earn_rate','2')}}">
+              <small style="color:#737970;font-size:11px;margin-top:3px">e.g. 2 → customer earns 2 pts per ₹1</small>
+            </label>
+            <label>Points needed per ₹1 off
+              <input type="number" name="loyalty_redeem_rate" min="1" value="{{data.get('loyalty_redeem_rate','100')}}">
+              <small style="color:#737970;font-size:11px;margin-top:3px">e.g. 100 → need 100 pts to get ₹1 off</small>
+            </label>
+            <label>Minimum points before redemption
+              <input type="number" name="loyalty_min_redeem" min="0" value="{{data.get('loyalty_min_redeem','500')}}">
+              <small style="color:#737970;font-size:11px;margin-top:3px">Customer must hold at least this many pts</small>
+            </label>
+            <label>Max % of bill payable with points
+              <input type="number" name="loyalty_max_redeem_pct" min="1" max="100" value="{{data.get('loyalty_max_redeem_pct','30')}}">
+              <small style="color:#737970;font-size:11px;margin-top:3px">e.g. 30 → max 30% of any bill can be paid with points</small>
+            </label>
+            <label>Points expiry (months, 0 = never)
+              <input type="number" name="loyalty_expiry_months" min="0" value="{{data.get('loyalty_expiry_months','12')}}">
+              <small style="color:#737970;font-size:11px;margin-top:3px">Rolling window reset on each transaction</small>
+            </label>
+          </div>
+
+          <h4 style="margin:22px 0 14px;font:700 12px/1 'Manrope';text-transform:uppercase;letter-spacing:.6px;color:#737970">Referral bonuses</h4>
+          <div class="form-grid">
+            <label>Referrer credit (₹)
+              <input type="number" name="referral_referrer_credit" min="0" step="0.01" value="{{data.get('referral_referrer_credit','200')}}">
+              <small style="color:#737970;font-size:11px;margin-top:3px">Added to the existing customer's referral-credit balance</small>
+            </label>
+            <label>New-customer referral discount (₹)
+              <input type="number" name="referral_referee_discount" min="0" step="0.01" value="{{data.get('referral_referee_discount','100')}}">
+              <small style="color:#737970;font-size:11px;margin-top:3px">Deducted immediately from the referred customer's first bill</small>
+            </label>
+          </div>
+
+          <h4 style="margin:22px 0 14px;font:700 12px/1 'Manrope';text-transform:uppercase;letter-spacing:.6px;color:#737970">What earns points</h4>
+          <div class="form-grid">
+            <label class="switch-row">
+              <span><strong>Services</strong><small>Earn points on service sales</small></span>
+              <input type="checkbox" name="loyalty_earn_on_services" value="1" {% if data.get('loyalty_earn_on_services','1')=='1' %}checked{% endif %}>
+            </label>
+            <label class="switch-row">
+              <span><strong>Products</strong><small>Earn points on retail product sales</small></span>
+              <input type="checkbox" name="loyalty_earn_on_products" value="1" {% if data.get('loyalty_earn_on_products','1')=='1' %}checked{% endif %}>
+            </label>
+          </div>
+
+          <div style="margin-top:20px;padding:14px 16px;background:#f5f6f1;border-radius:12px;font-size:13px;line-height:1.6">
+            <strong>Live example with current settings:</strong><br>
+            Customer spends <strong>₹1,000</strong> → earns
+            <strong style="color:#4b8000">{{(data.get('loyalty_earn_rate','2')|float * 1000)|int}} pts</strong>.<br>
+            To get <strong>₹10 off</strong> they need
+            <strong>{{(data.get('loyalty_redeem_rate','100')|float * 10)|int}} pts</strong>.
+            Max redeemable on a ₹1,000 bill =
+            <strong>₹{{(1000 * data.get('loyalty_max_redeem_pct','30')|float / 100)|int}}</strong>.
+          </div>
+        </div>
+      </div>
+    </form>
+
+    {% if referral_pairs %}
+    <div class="panel">
+      <div class="panel-head">
+        <div><h3>Referral network</h3><p>Who brought whom to the salon</p></div>
+        <span class="badge active">{{referral_pairs|length}} pairs</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>New customer</th><th>Referred by</th><th>Their balance</th></tr></thead>
+          <tbody>
+            {% for p in referral_pairs %}
+            <tr>
+              <td><a href="/customers/{{p.referee_id}}" style="font-weight:600">{{p.referee_name}}</a><small style="display:block;color:#737970">{{p.referee_mobile}}</small></td>
+              <td>{{p.referrer_name}}<small style="display:block;color:#737970">{{p.referrer_mobile}}</small></td>
+              <td><strong style="color:#d9ff43">{{p.referrer_credit|money}} credit</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <aside>
+    <div class="panel" style="position:sticky;top:80px">
+      <div class="panel-head"><div><h3>Top members</h3><p>Ranked by points held</p></div></div>
+      {% for c in leaderboard %}
+      <div style="display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--line)">
+        <span style="width:20px;text-align:right;font-weight:700;color:{% if loop.index==1 %}#d9ff43{% elif loop.index==2 %}#aeb2ac{% elif loop.index==3 %}#c97c3a{% else %}#737970{% endif %};font-size:13px">{{loop.index}}</span>
+        <div style="flex:1;min-width:0;overflow:hidden">
+          <a href="/customers/{{c.id}}" style="font-weight:700;font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{c.name}}</a>
+          <small style="color:#737970">{{c.mobile}}</small>
+        </div>
+        <strong style="color:#d9ff43;white-space:nowrap;font-size:15px">{{c.loyalty_points}}</strong>
+      </div>
+      {% else %}
+      <div class="empty" style="padding:24px">No members have earned points yet.</div>
+      {% endfor %}
+    </div>
+  </aside>
+</div>
+
+<div class="panel" style="margin-top:16px">
+  <div class="panel-head">
+    <div><h3>Recent activity</h3><p>Last 50 transactions across all customers</p></div>
+    <span style="font-size:13px;color:#737970">{{recent_txns|length}} shown</span>
+  </div>
+  {% if recent_txns %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Customer</th><th>Type</th><th>Points</th><th>Balance after</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        {% for t in recent_txns %}
+        <tr>
+          <td style="white-space:nowrap">{{t.created_at|truncate(10, true, '')}}</td>
+          <td><a href="/customers/{{t.cust_id}}" style="font-weight:600">{{t.customer_name}}</a></td>
+          <td><span class="badge {{t.type.replace('_','-')}}">{{t.type.replace('_',' ')|title}}</span></td>
+          <td><strong {% if t.points > 0 %}style="color:#4b8000"{% else %}style="color:#c65047"{% endif %}>{{'+' if t.points > 0 else ''}}{{t.points}}</strong></td>
+          <td>{{t.balance_after}}</td>
+          <td style="color:#737970;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{t.description or '—'}}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty" style="padding:32px">No loyalty transactions have been recorded yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

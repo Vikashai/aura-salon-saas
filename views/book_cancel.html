@@ -1,0 +1,58 @@
+{% extends 'base_public.html' %}
+{% block title %}Cancel Appointment{% endblock %}
+{% block head %}
+<style>
+.cancel-wrap{text-align:center;padding:36px 0 20px}
+.cancel-icon{width:64px;height:64px;background:#fde8e7;border-radius:50%;display:grid;place-items:center;font-size:30px;margin:0 auto 18px}
+.cancel-wrap h1{font:700 26px 'Manrope';margin:0 0 8px}
+.appt-card{background:#fff;border:1px solid #e5e8e1;border-radius:18px;padding:24px;margin:20px 0}
+.detail-row{display:flex;padding:10px 0;border-bottom:1px solid #eef0eb}.detail-row:last-child{border:0}
+.detail-row span{color:#737970;width:110px;flex-shrink:0;font-size:13px}.detail-row b{font-weight:600}
+.btn-cancel{background:#fde8e7;border:0;border-radius:12px;padding:14px 24px;font:700 14px 'DM Sans';color:#9c2d27;cursor:pointer;width:100%;margin-top:4px}
+.btn-cancel:hover{background:#f5ccc9}
+.done-icon{width:72px;height:72px;background:#e5f4d8;border-radius:50%;display:grid;place-items:center;font-size:34px;margin:0 auto 18px}
+</style>
+{% endblock %}
+{% block content %}
+
+{% if already_done %}
+  <div class="cancel-wrap">
+    {% if appt.status == 'cancelled' %}
+    <div class="done-icon">✓</div>
+    <h1>Already cancelled</h1>
+    <p style="color:#737970">This appointment was already cancelled.</p>
+    {% elif appt.status == 'completed' %}
+    <div style="font-size:48px;text-align:center;margin-bottom:16px">✦</div>
+    <h1>Appointment completed</h1>
+    <p style="color:#737970">This appointment has already been completed — it can no longer be cancelled.</p>
+    {% else %}
+    <div class="done-icon">✓</div>
+    <h1>Cannot cancel</h1>
+    <p style="color:#737970">This appointment has status: <strong>{{appt.status|replace('_',' ')|title}}</strong>.</p>
+    {% endif %}
+  </div>
+
+{% else %}
+  <div class="cancel-wrap">
+    <div class="cancel-icon">✗</div>
+    <h1>Cancel appointment?</h1>
+    <p style="color:#737970">Please confirm you'd like to cancel the following booking:</p>
+  </div>
+
+  <div class="appt-card">
+    <div class="detail-row"><span>Booking ID</span><b>{{appt.appointment_id}}</b></div>
+    <div class="detail-row"><span>Service</span><b>{{appt.service_name}}</b></div>
+    <div class="detail-row"><span>Date</span><b>{{appt.appointment_date}}</b></div>
+    <div class="detail-row"><span>Time</span><b>{{appt.appointment_time|fmt_time}}</b></div>
+    <div class="detail-row"><span>For</span><b>{{appt.customer_name}}</b></div>
+  </div>
+
+  <form method="POST">
+    <button type="submit" class="btn-cancel">Yes, cancel this appointment</button>
+  </form>
+  <a href="/book/success/{{appt.booking_token}}" class="btn full ghost" style="text-align:center;display:block;margin-top:10px">Go back</a>
+
+{% endif %}
+
+<a href="/book" class="btn primary full" style="margin-top:16px;display:block;text-align:center">Book a new appointment →</a>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends 'base.html' %}{% block content %}
+<a class="back" href="/appointments">← Back to appointments</a>
+<div class="page-head"><div><p class="eyebrow">SCHEDULING</p><h1>New appointment</h1><p>Book a walk-in or phone appointment.</p></div></div>
+
+<form method="POST" class="form-layout">
+  <div class="form-main">
+    <div class="form-card">
+      <h3>Customer</h3>
+      <div class="form-grid">
+        <label class="span-2">Find existing customer
+          <input id="customer-search" list="customer-options" autocomplete="off" placeholder="Search by name or mobile">
+        </label>
+        <datalist id="customer-options">{% for c in customers %}<option value="{{c.name}} · {{c.mobile}}" data-id="{{c.id}}" data-name="{{c.name}}" data-mobile="{{c.mobile}}" data-email="{{c.email or ''}}"></option>{% endfor %}</datalist>
+        <input type="hidden" name="customer_id" id="customer_id">
+        <label>Full name<input name="customer_name" id="cust-name" required placeholder="Walk-in customer"></label>
+        <label>Mobile<input name="customer_mobile" id="cust-mobile" required placeholder="9876543210"></label>
+        <label class="span-2">Email<input name="customer_email" id="cust-email" type="email" placeholder="optional"></label>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <h3>Booking details</h3>
+      <div id="svc-lines"></div>
+      <button type="button" class="btn ghost compact" onclick="addServiceLine()" style="margin-bottom:20px">＋ Add another service</button>
+      <div class="form-grid">
+        <label>Stylist
+          <select name="staff_id" id="stf" onchange="fetchSlots()">
+            <option value="">Any available</option>
+            {% for s in staff %}<option value="{{s.id}}" data-staff-id="{{s.id}}">{{s.name}} · {{s.role}}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Date
+          <input name="appointment_date" id="appt-date" type="date" required min="{{today}}" onchange="fetchSlots()">
+        </label>
+        <label>Time slot
+          <select name="appointment_time" id="appt-time" required>
+            <option value="">Select service & date first</option>
+          </select>
+        </label>
+        <label class="span-2">Notes<textarea name="notes" placeholder="Any special requests…" rows="3"></textarea></label>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="form-card sticky">
+      <h3>Notifications</h3>
+      <label style="flex-direction:row;align-items:center;gap:10px;margin-bottom:12px;font-weight:500">
+        <input type="checkbox" name="notify_email" checked style="width:16px;height:16px;accent-color:#20211f">
+        Send confirmation email
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:10px;margin-bottom:24px;font-weight:500">
+        <input type="checkbox" name="notify_whatsapp" style="width:16px;height:16px;accent-color:#20211f">
+        Send WhatsApp message
+      </label>
+      <button type="submit" class="btn primary full">Confirm appointment</button>
+      <a href="/appointments" class="btn full ghost" style="margin-top:8px;text-align:center;display:block">Cancel</a>
+    </div>
+  </div>
+</form>
+
+<template id="svc-line-template">
+  <div class="svc-line-row" style="display:flex;gap:10px;align-items:end;margin-bottom:14px">
+    <label style="flex:1;margin:0">Service
+      <select class="svc-select" name="service_id" onchange="serviceChanged()" required>
+        <option value="">Select a service…</option>
+        {% for s in services %}<option value="{{s.id}}" data-staff-ids="{{s.staff_ids or ''}}">{{s.name}} — ₹{{s.price|int}} ({{s.duration}} min)</option>{% endfor %}
+      </select>
+    </label>
+    <button type="button" aria-label="Remove service" onclick="removeServiceLine(this)" style="flex:0 0 36px;height:44px;border:2px solid #e5e8e1;background:#fff;border-radius:10px;cursor:pointer;font-size:16px;color:#9a9e97">×</button>
+  </div>
+</template>
+
+<script>
+const customerSearch = document.getElementById('customer-search'), customerId = document.getElementById('customer_id');
+function selectedOption(listId, value) { return [...document.getElementById(listId).options].find(o => o.value === value); }
+customerSearch.addEventListener('input', () => {
+  const option = selectedOption('customer-options', customerSearch.value);
+  customerId.value = option?.dataset.id || '';
+  if (option) {
+    document.getElementById('cust-name').value = option.dataset.name;
+    document.getElementById('cust-mobile').value = option.dataset.mobile;
+    document.getElementById('cust-email').value = option.dataset.email;
+  }
+});
+
+function addServiceLine() {
+  const fragment = document.getElementById('svc-line-template').content.cloneNode(true);
+  document.getElementById('svc-lines').append(fragment);
+  fetchSlots();
+}
+function removeServiceLine(btn) {
+  const lines = document.getElementById('svc-lines');
+  if (lines.children.length <= 1) return;
+  btn.closest('.svc-line-row').remove();
+  updateEligibleStaff();
+  fetchSlots();
+}
+
+function updateEligibleStaff() {
+  const assignedSets=[...document.querySelectorAll('.svc-select')].map(select=>select.selectedOptions[0]?.dataset.staffIds||'').filter(Boolean).map(ids=>ids.split(','));
+  const eligible=assignedSets.length?assignedSets.reduce((common,set)=>common.filter(id=>set.includes(id))):null;
+  const staff=document.getElementById('stf');
+  [...staff.options].forEach(option=>{if(!option.dataset.staffId)return;option.hidden=Boolean(eligible&&!eligible.includes(option.dataset.staffId));option.disabled=option.hidden});
+  if(staff.selectedOptions[0]?.disabled)staff.value='';
+}
+function serviceChanged(){updateEligibleStaff();fetchSlots()}
+
+async function fetchSlots() {
+  const ids  = [...document.querySelectorAll('.svc-select')].map(s => s.value).filter(Boolean);
+  const date = document.getElementById('appt-date').value;
+  const stf  = document.getElementById('stf').value;
+  const sel  = document.getElementById('appt-time');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  if (!ids.length || !date) { sel.innerHTML = '<option value="">Select service & date first</option>'; return; }
+  const params = new URLSearchParams({ date, staff_id: stf });
+  ids.forEach(id => params.append('service_id', id));
+  const res = await fetch(`/api/slots?${params}`);
+  const slots = await res.json();
+  if (!slots.length) { sel.innerHTML = '<option value="">No available slots</option>'; return; }
+  sel.innerHTML = slots.map(t => {
+    const [h,m] = t.split(':'); const h12 = h%12||12; const p = h<12?'AM':'PM';
+    return `<option value="${t}">${h12}:${m} ${p}</option>`;
+  }).join('');
+}
+
+addServiceLine();
+</script>
+{% endblock %}

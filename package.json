@@ -1,0 +1,36 @@
+{
+  "name": "aura-salon-os",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Aura Salon OS - Hostinger Node.js edition",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "db:init": "node scripts/init-db.js",
+    "db:migrate": "node scripts/migrate-sqlite.js",
+    "menu:import": "node scripts/import-rajarani-menu.js",
+    "data:audit": "node scripts/audit-data.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^16.6.1",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "express-mysql-session": "^3.0.3",
+    "express-rate-limit": "^8.2.1",
+    "express-session": "^1.18.2",
+    "helmet": "^8.1.0",
+    "multer": "^2.2.0",
+    "mysql2": "^3.14.3",
+    "nodemailer": "^9.0.3",
+    "nunjucks": "^3.2.4"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  }
+}

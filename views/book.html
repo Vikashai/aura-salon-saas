@@ -1,0 +1,225 @@
+{% extends 'base_public.html' %}
+{% block title %}Book an Appointment{% endblock %}
+{% block head %}
+<style>
+.book-hero{text-align:center;padding:36px 0 28px}
+.book-hero h1{font:700 32px 'Manrope';margin:0 0 8px;letter-spacing:-1px}.book-hero p{color:#737970;margin:0}
+.step-card{background:#fff;border:1px solid #e5e8e1;border-radius:20px;padding:28px;margin-bottom:16px}
+.step-card h2{font:700 18px 'Manrope';margin:0 0 20px}
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:600px){.field-grid{grid-template-columns:1fr}}
+.svc-line{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.svc-line select{flex:1 1 140px;min-width:0}
+.svc-line select.svc-item{flex:2 1 220px}
+.svc-line button{flex:0 0 36px;border:2px solid #e5e8e1;background:#fff;border-radius:10px;cursor:pointer;font-size:16px;color:#9a9e97}
+.svc-line button:hover{border-color:#d84c44;color:#d84c44}
+.svc-selected{border:2px solid #20211f;background:#f8f9f4;border-radius:14px;padding:14px 16px;margin-top:8px}
+.svc-selected strong{display:block;margin-bottom:4px}.svc-selected small{color:#737970}
+.svc-price{float:right;font-weight:700;color:#20211f}
+.slots-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.slot-btn{border:2px solid #e5e8e1;background:#fff;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.slot-btn:hover{border-color:#a6b856}
+.slot-btn.active{background:#20211f;border-color:#20211f;color:#dfff3f}
+.slot-loading{color:#737970;font-size:13px}
+#time-hidden{display:none}
+.wa-row{display:flex;align-items:center;gap:10px;padding:14px;background:#e9ffe3;border-radius:12px;margin-top:16px}
+.wa-row input{width:18px;height:18px;accent-color:#25d366;flex-shrink:0}
+.wa-row label{font-size:13px;font-weight:500;color:#1a5c14;cursor:pointer}
+.submit-area{margin-top:24px}.submit-area .btn{font-size:15px;padding:15px 24px}
+.price-hint{background:#f5f6f1;border-radius:12px;padding:14px 16px;font-size:13px;color:#5e635d;margin-top:16px}
+.price-hint strong{color:#20211f;font-size:16px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="book-hero">
+  <h1>Book an Appointment</h1>
+  <p>Select your service, choose a time, and we'll confirm instantly.</p>
+</div>
+
+<form method="POST" id="book-form" onsubmit="return validateForm()">
+
+  <!-- Step 1: Service -->
+  <div class="step-card">
+    <h2>1 · Choose your services</h2>
+    <div id="svc-lines"></div>
+    <button type="button" class="btn ghost compact" onclick="addServiceLine()">＋ Add another service</button>
+    <div class="svc-selected" id="svc-selected" style="display:none">
+      <strong id="svc-selected-name"></strong>
+      <small id="svc-selected-meta"></small>
+    </div>
+  </div>
+  <template id="svc-line-template">
+    <div class="svc-line">
+      <select class="svc-gender" onchange="populateSvcCategories(this)">
+        <option value="">Gender</option>
+        <option>Men</option>
+        <option>Women</option>
+      </select>
+      <select class="svc-category" onchange="populateSvcItems(this)" disabled>
+        <option value="">Category</option>
+      </select>
+      <select class="svc-item" name="service_id" onchange="onSvcLinesChanged()" disabled>
+        <option value="">Service</option>
+      </select>
+      <button type="button" aria-label="Remove service" onclick="removeServiceLine(this)">×</button>
+    </div>
+  </template>
+  <div id="svc-catalog" hidden>
+    {% for s in services %}<i data-id="{{s.id}}" data-name="{{s.name}}" data-category="{{s.category}}" data-price="{{s.price}}" data-duration="{{s.duration}}" data-popular="{{'1' if s.popular else '0'}}"></i>{% endfor %}
+  </div>
+
+  <!-- Step 2: Staff + Date + Time -->
+  <div class="step-card">
+    <h2>2 · Pick your slot</h2>
+    <div class="field-grid" style="margin-bottom:20px">
+      <label>Stylist preference
+        <select name="staff_id" id="stf-sel" onchange="fetchSlots()">
+          <option value="">Any available</option>
+          {% for s in staff %}<option value="{{s.id}}">{{s.name}} · {{s.role}}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Date
+        <input type="date" name="appointment_date" id="date-sel" required min="{{today}}" onchange="fetchSlots()">
+      </label>
+    </div>
+    <label style="margin-bottom:8px">Available time slots</label>
+    <div id="slots-area"><p class="slot-loading">Select a service and date to see available slots.</p></div>
+    <input type="hidden" name="appointment_time" id="time-hidden">
+  </div>
+
+  <!-- Step 3: Your details -->
+  <div class="step-card">
+    <h2>3 · Your details</h2>
+    <div class="field-grid">
+      <label>Full name<input name="customer_name" required placeholder="Ananya Sharma"></label>
+      <label>Mobile number<input name="customer_mobile" type="tel" required placeholder="9876543210" pattern="[6-9][0-9]{9}"></label>
+      <label class="span-2" style="grid-column:span 2">Email address (for confirmation)<input name="customer_email" type="email" placeholder="you@email.com"></label>
+      <label style="grid-column:span 2">Notes / special requests<textarea name="notes" rows="2" placeholder="Allergies, preferences, etc."></textarea></label>
+    </div>
+
+    <div class="wa-row">
+      <input type="checkbox" name="notify_whatsapp" id="wa-check" checked>
+      <label for="wa-check">Send me a WhatsApp confirmation and reminder</label>
+    </div>
+
+    <div class="price-hint" id="price-hint" style="display:none">
+      Selected: <span id="hint-svc"></span> · <strong id="hint-price"></strong> · <span id="hint-time"></span>
+    </div>
+  </div>
+
+  <div class="submit-area">
+    <button type="submit" class="btn primary full">Request appointment →</button>
+    <p style="text-align:center;font-size:12px;color:#9a9e97;margin-top:12px">We'll send a confirmation once the salon reviews your booking.</p>
+  </div>
+</form>
+
+<script>
+let selectedTotalPrice = 0, selectedTotalDur = 0;
+
+const svcCatalog = [...document.querySelectorAll('#svc-catalog i')].map(el => ({...el.dataset, id: +el.dataset.id, price: +el.dataset.price, duration: +el.dataset.duration, popular: el.dataset.popular === '1'}));
+function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function splitCategory(full) { const parts = full.split(' · '); return parts.length > 1 ? { gender: parts[0], category: parts.slice(1).join(' · ') } : { gender: '', category: full }; }
+
+function addServiceLine() {
+  const fragment = document.getElementById('svc-line-template').content.cloneNode(true);
+  document.getElementById('svc-lines').append(fragment);
+  onSvcLinesChanged();
+}
+
+function removeServiceLine(btn) {
+  const lines = document.getElementById('svc-lines');
+  if (lines.children.length <= 1) return;
+  btn.closest('.svc-line').remove();
+  onSvcLinesChanged();
+}
+
+function populateSvcCategories(select) {
+  const line = select.closest('.svc-line'), gender = select.value;
+  const categorySelect = line.querySelector('.svc-category'), itemSelect = line.querySelector('.svc-item');
+  const values = [...new Set(svcCatalog.filter(s => !gender || splitCategory(s.category).gender === gender).map(s => splitCategory(s.category).category))].sort();
+  categorySelect.innerHTML = '<option value="">Category</option>' + values.map(v => `<option>${escapeHtml(v)}</option>`).join('');
+  categorySelect.disabled = !gender;
+  itemSelect.innerHTML = '<option value="">Service</option>';
+  itemSelect.disabled = true;
+  onSvcLinesChanged();
+}
+
+function populateSvcItems(select) {
+  const line = select.closest('.svc-line'), gender = line.querySelector('.svc-gender').value, category = select.value;
+  const itemSelect = line.querySelector('.svc-item');
+  const items = svcCatalog.filter(s => splitCategory(s.category).category === category && (!gender || splitCategory(s.category).gender === gender)).sort((a, b) => a.name.localeCompare(b.name));
+  itemSelect.innerHTML = '<option value="">Service</option>' + items.map(s => `<option value="${s.id}">${s.popular ? '★ ' : ''}${escapeHtml(s.name)} — ₹${s.price.toLocaleString('en-IN')}</option>`).join('');
+  itemSelect.disabled = !items.length;
+  onSvcLinesChanged();
+}
+
+function selectedServices() {
+  return [...document.querySelectorAll('.svc-item')].map(sel => svcCatalog.find(s => s.id === +sel.value)).filter(Boolean);
+}
+
+function onSvcLinesChanged() {
+  const services = selectedServices();
+  selectedTotalPrice = services.reduce((sum, s) => sum + s.price, 0);
+  selectedTotalDur = services.reduce((sum, s) => sum + s.duration, 0);
+  const summary = document.getElementById('svc-selected');
+  if (services.length) {
+    document.getElementById('svc-selected-name').textContent = services.map(s => s.name).join(' + ');
+    document.getElementById('svc-selected-meta').textContent = `${selectedTotalDur} min total · ₹${selectedTotalPrice.toLocaleString('en-IN')}`;
+    summary.style.display = '';
+  } else {
+    summary.style.display = 'none';
+  }
+  updateHint();
+  fetchSlots();
+}
+
+async function fetchSlots() {
+  const services = selectedServices();
+  const date  = document.getElementById('date-sel').value;
+  const staff = document.getElementById('stf-sel').value;
+  const area  = document.getElementById('slots-area');
+  document.getElementById('time-hidden').value = '';
+  if (!services.length) { area.innerHTML = '<p class="slot-loading">Select a service and date to see available slots.</p>'; updateHint(); return; }
+  if (!date) { area.innerHTML = '<p class="slot-loading">Pick a date to see available slots.</p>'; return; }
+  area.innerHTML = '<p class="slot-loading">Loading slots…</p>';
+  const params = new URLSearchParams({ date, staff_id: staff });
+  services.forEach(s => params.append('service_id', s.id));
+  const res   = await fetch(`/api/slots?${params}`);
+  const slots = await res.json();
+  if (!slots.length) { area.innerHTML = '<p class="slot-loading" style="color:#c65047">No slots available for this date. Try another date or stylist.</p>'; return; }
+  area.innerHTML = '<div class="slots-wrap">'+slots.map(t => {
+    const [h,m] = t.split(':'); const h12 = h%12||12; const p = +h<12?'AM':'PM';
+    return `<button type="button" class="slot-btn" onclick="selectSlot('${t}', this)">${h12}:${m} ${p}</button>`;
+  }).join('')+'</div>';
+}
+
+function selectSlot(time, btn) {
+  document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('time-hidden').value = time;
+  updateHint();
+}
+
+function updateHint() {
+  const hint = document.getElementById('price-hint');
+  const t = document.getElementById('time-hidden').value;
+  if (selectedTotalDur && t) {
+    const [h,m] = t.split(':'); const h12 = h%12||12; const p = +h<12?'AM':'PM';
+    document.getElementById('hint-svc').textContent = `${selectedServices().length} service${selectedServices().length===1?'':'s'}`;
+    document.getElementById('hint-price').textContent = '₹' + selectedTotalPrice.toLocaleString('en-IN');
+    document.getElementById('hint-time').textContent = `${h12}:${m} ${p}`;
+    hint.style.display = '';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+
+function validateForm() {
+  if (!selectedServices().length) { alert('Please select at least one service.'); return false; }
+  if (!document.getElementById('time-hidden').value) { alert('Please select a time slot.'); return false; }
+  return true;
+}
+
+addServiceLine();
+</script>
+{% endblock %}

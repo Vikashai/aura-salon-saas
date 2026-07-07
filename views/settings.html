@@ -1,0 +1,115 @@
+{% extends 'base.html' %}{% block content %}<div class="page-head"><div><p class="eyebrow">ADMIN</p><h1>Salon settings</h1><p>Business profile, booking hours, and notifications.</p></div></div>
+<form method="post" class="settings-layout">
+<div class="settings-nav">
+  <a href="#profile" class="active">Business profile</a>
+  <a href="#billing">Billing & GST</a>
+  <a href="#booking">Booking hours</a>
+  <a href="#capacity">Seating capacity</a>
+  <a href="#referrals">Referral rewards</a>
+  <a href="#loyalty">Loyalty program</a>
+  <a href="#email">Email notifications</a>
+  <a href="#whatsapp">WhatsApp</a>
+</div>
+<div>
+  <div class="form-card" id="profile">
+    <h3>Business profile</h3>
+    <div class="form-grid">
+      <label>Salon name<input name="salon_name" value="{{data.get('salon_name','')}}"></label>
+      <label>Contact number<input name="contact" value="{{data.get('contact','')}}"></label>
+      <label>WhatsApp / phone<input name="salon_phone" value="{{data.get('salon_phone','')}}"></label>
+      <label>Public email<input name="salon_email" type="email" value="{{data.get('salon_email','')}}"></label>
+      <label>Reply-to email<input name="email" type="email" value="{{data.get('email','')}}"></label>
+      <label>App base URL<input name="base_url" value="{{data.get('base_url','http://localhost:5000')}}" placeholder="https://yourname.pythonanywhere.com"></label>
+      <label class="span-2">Address<input name="address" value="{{data.get('address','')}}"></label>
+    </div>
+  </div>
+
+  <div class="form-card" id="billing">
+    <h3>Billing & GST</h3>
+    <div class="form-grid">
+      <label>Invoice prefix<input name="invoice_prefix" value="{{data.get('invoice_prefix','INV')}}"></label>
+      <label>GST number<input name="gst_number" value="{{data.get('gst_number','')}}"></label>
+      <label>Tax invoicing<select name="tax_enabled"><option value="1" {% if data.get('tax_enabled')=='1' %}selected{% endif %}>Enabled</option><option value="0" {% if data.get('tax_enabled')=='0' %}selected{% endif %}>Disabled</option></select></label>
+    </div>
+  </div>
+
+  <div class="form-card" id="booking">
+    <h3>Booking hours & slots</h3>
+    <div class="form-grid">
+      <label>Opening time<input name="business_open" type="time" value="{{data.get('business_open','09:00')}}"></label>
+      <label>Closing time<input name="business_close" type="time" value="{{data.get('business_close','20:00')}}"></label>
+      <label>Slot interval (minutes)
+        <select name="slot_interval">
+          {% for v in ['15','30','45','60'] %}<option value="{{v}}" {% if data.get('slot_interval',30)|string==v %}selected{% endif %}>{{v}} min</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="form-card" id="capacity">
+    <h3>Seating capacity</h3>
+    <p class="settings-help">Create capacity pools only for resources that limit simultaneous bookings, such as general salon chairs, spa rooms or nail stations.</p>
+    <div class="capacity-head"><span>Pool name</span><span>Seats</span><span>Actions</span></div>
+    <div class="capacity-list">{% for pool in capacity_pools %}<div class="capacity-row"><input name="pool_name_{{pool.id}}" value="{{pool.name}}" {% if pool.is_default %}readonly{% endif %} aria-label="Pool name"><input name="pool_seats_{{pool.id}}" type="number" min="1" value="{{pool.seats}}" aria-label="Seats"><div class="capacity-actions"><button class="btn ghost compact" type="submit" formaction="/settings/capacity-pools/{{pool.id}}" formmethod="post">Save</button>{% if not pool.is_default %}<button class="btn ghost compact danger" type="submit" formaction="/settings/capacity-pools/{{pool.id}}/delete" formmethod="post" onclick="return confirm('Remove this pool? Services using it will fall back to General.')">Remove</button>{% endif %}</div></div>{% endfor %}</div>
+    <div class="capacity-add"><div><strong>Add another capacity pool</strong><small>Example: Spa room, Nail station</small></div><input name="new_pool_name" placeholder="Pool name"><input name="new_pool_seats" type="number" min="1" value="1" aria-label="New pool seats"><button class="btn primary compact" type="submit" formaction="/settings/capacity-pools/add" formmethod="post">Add pool</button></div>
+  </div>
+
+  <div class="form-card" id="referrals">
+    <h3>Referral rewards</h3>
+    <p class="settings-help">These are rupee amounts. The friend receives the discount on their first bill; the referrer receives credit after that first bill is paid.</p>
+    <div class="referral-settings-grid"><label><span>New customer gets</span><strong>First-visit discount</strong><div class="money-input"><span>₹</span><input type="number" name="referral_referee_discount" min="0" step="0.01" value="{{data.get('referral_referee_discount','100')}}"></div></label><label><span>Existing customer gets</span><strong>Referral credit</strong><div class="money-input"><span>₹</span><input type="number" name="referral_referrer_credit" min="0" step="0.01" value="{{data.get('referral_referrer_credit','200')}}"></div></label></div>
+    <div class="referral-example">Example: With the current settings, the new customer gets <b>{{data.get('referral_referee_discount','100')|money}}</b> off and the person who referred them receives <b>{{data.get('referral_referrer_credit','200')|money}}</b> credit.</div>
+    <button class="btn primary" type="submit">Save referral settings</button>
+  </div>
+
+  <div class="form-card" id="loyalty">
+    <h3>Loyalty program</h3>
+    <p style="color:#737970;margin:0 0 18px;font-size:13px">The loyalty program now has its own dedicated management page with analytics, leaderboard, referral tracking and all configuration in one place.</p>
+    <a class="btn primary" href="/loyalty">Go to Loyalty dashboard →</a>
+  </div>
+
+  <div class="form-card" id="email">
+    <h3>Email notifications (SMTP)</h3>
+    <p style="color:#737970;margin:0 0 18px;font-size:13px">Use a Gmail App Password. Enable at myaccount.google.com → Security → 2-Step → App passwords.</p>
+    <div class="form-grid">
+      <label>SMTP host<input name="smtp_host" value="{{data.get('smtp_host','smtp.gmail.com')}}"></label>
+      <label>SMTP port<input name="smtp_port" value="{{data.get('smtp_port','587')}}"></label>
+      <label>Username / email<input name="smtp_user" value="{{data.get('smtp_user','')}}" placeholder="your@gmail.com"></label>
+      <label>App password<input name="smtp_pass" type="password" value="" placeholder="{% if data.get('smtp_pass_configured') %}Configured — leave blank to keep{% else %}16-char app password{% endif %}"></label>
+      <label class="span-2">From address (display)<input name="smtp_from" value="{{data.get('smtp_from','')}}" placeholder="Leave blank to use username"></label>
+    </div>
+  </div>
+
+  <div class="form-card" id="whatsapp">
+    <h3>WhatsApp notifications</h3>
+    <p style="color:#737970;margin:0 0 18px;font-size:13px">Meta Cloud API is the lowest-cost option. Use Meta's test number immediately, then add approved utility template names for production messages.</p>
+    <div class="form-grid">
+      <label>Provider<select name="whatsapp_provider"><option value="meta" {% if data.get('whatsapp_provider','meta')=='meta' %}selected{% endif %}>Meta Cloud API (recommended)</option><option value="twilio" {% if data.get('whatsapp_provider')=='twilio' %}selected{% endif %}>Twilio</option></select></label>
+      <label>Meta Phone Number ID<input name="meta_phone_number_id" value="{{data.get('meta_phone_number_id','')}}" placeholder="From WhatsApp API Setup"></label>
+      <label class="span-2">Meta access token<input name="meta_whatsapp_token" type="password" value="" placeholder="{% if data.get('meta_token_configured') %}Configured — leave blank to keep{% else %}Temporary token for testing; permanent token for production{% endif %}"></label>
+      <label>Graph API version<input name="meta_api_version" value="{{data.get('meta_api_version','v25.0')}}"></label>
+      <label>Template language<input name="meta_template_language" value="{{data.get('meta_template_language','en_US')}}" placeholder="en_US"></label>
+      <label>Confirmation template<input name="meta_template_confirmation" value="{{data.get('meta_template_confirmation','')}}" placeholder="salon_booking_confirmation"></label>
+      <label>Reminder template<input name="meta_template_reminder" value="{{data.get('meta_template_reminder','')}}" placeholder="salon_booking_reminder"></label>
+      <label class="span-2">Cancellation template<input name="meta_template_cancellation" value="{{data.get('meta_template_cancellation','')}}" placeholder="salon_booking_cancellation"></label>
+      <label>Welcome template<input name="meta_template_welcome" value="{{data.get('meta_template_welcome','')}}" placeholder="salon_welcome"></label>
+      <label>Birthday template<input name="meta_template_birthday" value="{{data.get('meta_template_birthday','')}}" placeholder="salon_birthday"></label>
+      <label class="span-2">Anniversary template<input name="meta_template_anniversary" value="{{data.get('meta_template_anniversary','')}}" placeholder="salon_anniversary"></label>
+      <div class="span-2" style="border-top:1px solid #e5e8e1;margin-top:6px;padding-top:16px"><strong style="font-size:13px">Optional Twilio fallback</strong></div>
+      <label>Twilio Account SID<input name="twilio_sid" value="{{data.get('twilio_sid','')}}" placeholder="ACxxxxxxxxxxxxxxxx"></label>
+      <label>Auth token<input name="twilio_token" type="password" value="" placeholder="{% if data.get('twilio_token_configured') %}Configured — leave blank to keep{% else %}your auth token{% endif %}"></label>
+      <label class="span-2">WhatsApp from-number<input name="twilio_whatsapp_from" value="{{data.get('twilio_whatsapp_from','whatsapp:+14155238886')}}" placeholder="whatsapp:+14155238886"></label>
+    </div>
+    <div style="border-top:1px solid #e5e8e1;margin-top:20px;padding-top:18px">
+      <strong style="font-size:13px">Test the saved connection</strong>
+      <p style="color:#737970;margin:5px 0 12px;font-size:12px">Save settings first. For Meta, this sends the built-in <code>hello_world</code> template.</p>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+        <label style="flex:1;min-width:220px">Recipient number<input name="test_recipient" placeholder="919876543210"></label>
+        <button class="btn ghost" type="submit" formaction="/settings/whatsapp/test" formmethod="post">Send test message</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-actions"><button class="btn primary">Save all settings</button></div>
+</div>
+</form><style>.settings-help{color:var(--muted);margin:0 0 20px;line-height:1.55}.capacity-head,.capacity-row{display:grid;grid-template-columns:minmax(0,1fr) 90px 150px;gap:12px;align-items:center}.capacity-head{padding:0 2px 8px;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}.capacity-row{padding:12px 0;border-top:1px solid var(--line)}.capacity-row input{width:100%;min-width:0}.capacity-actions{display:flex;gap:7px;justify-content:flex-end}.capacity-add{display:grid;grid-template-columns:minmax(170px,1fr) minmax(0,1fr) 90px auto;gap:10px;align-items:end;margin-top:18px;padding:18px;background:#f7f8f4;border-radius:14px}.capacity-add>div{display:flex;flex-direction:column;gap:3px}.capacity-add small{color:var(--muted)}.capacity-add input{width:100%;min-width:0}.referral-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.referral-settings-grid>label{display:flex;flex-direction:column;gap:5px;padding:17px;border:1px solid var(--line);border-radius:14px}.referral-settings-grid label>span{color:var(--muted);font-size:11px}.money-input{display:flex;align-items:center;border:1px solid #dfe2db;border-radius:10px;margin-top:8px;background:#fff}.money-input>span{padding-left:12px;color:var(--ink)!important;font-size:16px!important}.money-input input{border:0;width:100%;box-shadow:none!important}.referral-example{background:#f3fbe8;border:1px solid #d4e8b8;border-radius:12px;padding:13px 15px;margin:14px 0;line-height:1.5}@media(max-width:760px){.capacity-head{display:none}.capacity-row{grid-template-columns:1fr 80px}.capacity-actions{grid-column:span 2;justify-content:flex-start}.capacity-add{grid-template-columns:1fr 80px}.capacity-add>div{grid-column:span 2}.capacity-add .btn{width:100%}.referral-settings-grid{grid-template-columns:1fr}}</style>{% endblock %}

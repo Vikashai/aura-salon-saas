@@ -1,0 +1,23 @@
+{% extends 'base.html' %}{% block content %}
+<div class="page-head"><div><a class="back" href="/customers">← Customers</a><h1>{{'Edit' if row else 'Add'}} customer</h1><p>Capture the details your team needs for personal service.</p></div></div>
+<form method="post" class="form-layout"><div class="form-main">
+<div class="form-card"><h3>Basic information</h3><div class="form-grid">
+<label>Full name*<input required name="name" value="{{row.name if row else ''}}"></label>
+<label>WhatsApp mobile number*<input required type="tel" inputmode="numeric" pattern="[0-9]{10}" minlength="10" maxlength="10" name="mobile" placeholder="10-digit number" value="{{row.mobile if row else ''}}" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"></label>
+<label>Alternate mobile<input type="tel" inputmode="numeric" pattern="[0-9]{10}" minlength="10" maxlength="10" name="alt_mobile" placeholder="10-digit number" value="{{row.alt_mobile if row else ''}}" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"></label>
+<label>Email*<input required type="email" name="email" value="{{row.email if row else ''}}"></label>
+<label>Gender<select name="gender">{% for v in ['Female','Male','Non-binary','Prefer not to say'] %}<option {% if row and row.gender==v %}selected{% endif %}>{{v}}</option>{% endfor %}</select></label>
+<label>Date of birth<input type="date" name="dob" value="{{row.dob if row else ''}}"></label>
+<label>Anniversary<input type="date" name="anniversary" value="{{row.anniversary if row else ''}}"></label>
+<label>Source<select name="source">{% for v in ['Walk-in','Instagram','Google','Referral','Existing customer','Other'] %}<option {% if row and row.source==v %}selected{% endif %}>{{v}}</option>{% endfor %}</select></label>
+</div></div>
+<div class="form-card"><h3>Address</h3><div class="form-grid">
+<label class="span-2">Street address<input name="address" value="{{row.address if row else ''}}"></label><label>City<input name="city" value="{{row.city if row else ''}}"></label><label>State<input name="state" value="{{row.state if row else ''}}"></label><label>Pincode<input name="pincode" value="{{row.pincode if row else ''}}"></label>
+<label>Referred by (customer)<select name="referred_by_id"><option value="">None</option>{% for c in all_customers %}<option value="{{c.id}}" {% if row and row.referred_by_id==c.id %}selected{% endif %}>{{c.name}} · {{c.mobile}}</option>{% endfor %}</select></label>
+</div></div>
+<div class="form-card"><h3>Preferences & care</h3><div class="form-grid">
+<label>Preferred services<input name="preferred_services" value="{{row.preferred_services if row else ''}}"></label><label>Preferred staff<input name="preferred_staff" value="{{row.preferred_staff if row else ''}}"></label><label>Preferred products<input name="preferred_products" value="{{row.preferred_products if row else ''}}"></label><label>Tags<input name="tags" placeholder="VIP, Regular" value="{{row.tags if row else ''}}"></label><label class="span-2">Hair / skin / body notes<textarea name="care_notes">{{row.care_notes if row else ''}}</textarea></label><label>Allergies or sensitivities<textarea name="allergies">{{row.allergies if row else ''}}</textarea></label><label>Special instructions<textarea name="instructions">{{row.instructions if row else ''}}</textarea></label>
+</div></div>
+<div class="form-card"><h3>Team notes</h3><div class="form-grid"><label>Customer-visible notes<textarea name="notes">{{row.notes if row else ''}}</textarea></label><label>Internal staff notes<textarea name="internal_notes">{{row.internal_notes if row else ''}}</textarea></label></div></div>
+</div><aside class="form-side"><div class="form-card sticky"><h3>Customer status</h3><label>Status<select name="status">{% for v in ['Active','Inactive','Blocked'] %}<option {% if row and row.status==v %}selected{% endif %}>{{v}}</option>{% endfor %}</select></label><button class="btn primary full" type="submit">Save customer</button><a class="btn ghost full" href="/customers">Cancel</a></div></aside></form>
+{% endblock %}
