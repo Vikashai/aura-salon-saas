@@ -36,8 +36,35 @@ module.exports = app => {
   }));
   app.post('/platform/logout',platformAuth,(req,res)=>req.session.destroy(()=>res.redirect('/platform/login')));
   app.get('/platform',platformAuth,asyncRoute(async(req,res)=>{
-    const [applications,salons]=await Promise.all([db.rows('SELECT * FROM salon_applications ORDER BY id DESC'),db.rows('SELECT * FROM salons ORDER BY id DESC')]);
-    res.render('platform_dashboard.html',{applications,salons,platform_admin:req.session.platformAdmin});
+    const [applications,salons]=await Promise.all([
+      db.rows('SELECT * FROM salon_applications ORDER BY id DESC LIMIT 50'),
+      db.platformRows(`SELECT s.*,
+        (SELECT COUNT(*) FROM users u WHERE u.salon_id=s.id AND u.status='Active') user_count,
+        (SELECT COUNT(*) FROM customers c WHERE c.salon_id=s.id AND c.archived=0) customer_count,
+        (SELECT COUNT(*) FROM appointments a WHERE a.salon_id=s.id AND a.appointment_date>=CURDATE()) upcoming_count,
+        (SELECT COALESCE(SUM(x.final_amount),0) FROM sales x WHERE x.salon_id=s.id AND x.cancelled=0 AND x.invoice_date>=DATE_FORMAT(CURDATE(),'%Y-%m-01')) month_sales
+        FROM salons s ORDER BY s.id DESC`),
+    ]);
+    const today=Date.now(),week=7*86400000;
+    const stats={total:salons.length,active:salons.filter(s=>s.status==='Active'&&(!s.access_ends_at||new Date(s.access_ends_at).getTime()>=today)).length,pending:applications.filter(a=>a.status==='New').length,overdue:salons.filter(s=>s.payment_status==='Overdue').length,customers:salons.reduce((sum,s)=>sum+Number(s.customer_count||0),0),users:salons.reduce((sum,s)=>sum+Number(s.user_count||0),0),month_sales:salons.reduce((sum,s)=>sum+Number(s.month_sales||0),0),expiring:salons.filter(s=>s.access_ends_at&&new Date(s.access_ends_at).getTime()>=today&&new Date(s.access_ends_at).getTime()<=today+week).length};
+    res.render('platform_dashboard.html',{applications,salons,stats,platform_admin:req.session.platformAdmin});
+  }));
+  app.get('/platform/salons/:id',platformAuth,asyncRoute(async(req,res)=>{
+    const id=Number(req.params.id),salon=await db.one('SELECT * FROM salons WHERE id=:id',{id});if(!salon)return res.status(404).send('Salon not found');
+    const [users,activity,recentSales,recentAppointments,application]=await Promise.all([
+      db.platformRows('SELECT id,name,username,role,status,last_login,last_activity FROM users WHERE salon_id=? ORDER BY id',[id]),
+      db.platformOne(`SELECT
+        (SELECT COUNT(*) FROM customers WHERE salon_id=?) customers,
+        (SELECT COUNT(*) FROM staff WHERE salon_id=? AND archived=0) staff,
+        (SELECT COUNT(*) FROM services WHERE salon_id=? AND archived=0) services,
+        (SELECT COUNT(*) FROM appointments WHERE salon_id=?) appointments,
+        (SELECT COUNT(*) FROM sales WHERE salon_id=? AND cancelled=0) invoices,
+        (SELECT COALESCE(SUM(final_amount),0) FROM sales WHERE salon_id=? AND cancelled=0) lifetime_sales`,[id,id,id,id,id,id]),
+      db.platformRows('SELECT invoice_no,invoice_date,final_amount,payment_status FROM sales WHERE salon_id=? ORDER BY id DESC LIMIT 8',[id]),
+      db.platformRows('SELECT appointment_id,customer_name,service_name,appointment_date,status FROM appointments WHERE salon_id=? ORDER BY id DESC LIMIT 8',[id]),
+      db.one('SELECT * FROM salon_applications WHERE salon_id=:id ORDER BY id DESC LIMIT 1',{id}),
+    ]);
+    res.render('platform_salon.html',{salon,users,activity,recentSales,recentAppointments,application,platform_admin:req.session.platformAdmin});
   }));
   app.post('/platform/applications/:id/approve',platformAuth,asyncRoute(async(req,res)=>{
     const id=Number(req.params.id),application=await db.one("SELECT * FROM salon_applications WHERE id=:id AND status='New'",{id});
