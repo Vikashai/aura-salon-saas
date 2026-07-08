@@ -26,9 +26,17 @@ CREATE TABLE IF NOT EXISTS salon_applications (
 
 CREATE TABLE IF NOT EXISTS platform_admins (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL,
-  username VARCHAR(100) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL,
-  status ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  username VARCHAR(100) NOT NULL UNIQUE, email VARCHAR(190) NULL UNIQUE, password_hash VARCHAR(255) NOT NULL,
+  status ENUM('Invited','Active','Inactive') NOT NULL DEFAULT 'Active',
   last_login DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS platform_admin_tokens (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, admin_id INT UNSIGNED NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE, purpose ENUM('invite','reset') NOT NULL,
+  expires_at DATETIME NOT NULL, used_at DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_platform_token_admin FOREIGN KEY (admin_id) REFERENCES platform_admins(id) ON DELETE CASCADE,
+  INDEX idx_platform_token_lookup (token_hash,used_at,expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS customers (

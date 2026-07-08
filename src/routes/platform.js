@@ -8,6 +8,9 @@ const { sendPlatformEmail } = require('../notifications');
 
 const platformAuth = (req,res,next) => req.session.platformAdmin ? next() : res.redirect('/platform/login');
 const slugify = value => String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70) || 'salon';
+const validEmail = value => /^\S+@\S+\.\S+$/.test(String(value||''));
+const validUsername = value => /^[a-z0-9._-]{3,40}$/.test(String(value||''));
+const tokenHash = token => crypto.createHash('sha256').update(String(token||'')).digest('hex');
 async function uniqueSlug(name) {
   const base=slugify(name); let slug=base; let suffix=1;
   while(await db.one('SELECT id FROM salons WHERE slug=:slug',{slug})) slug=`${base}-${++suffix}`;
@@ -16,6 +19,14 @@ async function uniqueSlug(name) {
 
 module.exports = app => {
   const limiter=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
+  async function sendAdminLink(admin,purpose) {
+    const token=crypto.randomBytes(32).toString('hex'),hash=tokenHash(token);
+    await db.platformRows('UPDATE platform_admin_tokens SET used_at=NOW() WHERE admin_id=? AND used_at IS NULL',[admin.id]);
+    await db.platformRows('INSERT INTO platform_admin_tokens(admin_id,token_hash,purpose,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 30 MINUTE))',[admin.id,hash,purpose]);
+    const base=String(process.env.APP_BASE_URL||'').replace(/\/$/,'');
+    const action=purpose==='invite'?'Set up your Company Admin account':'Reset your Company Admin password';
+    return sendPlatformEmail(admin.email,action,`<p>Hello ${String(admin.name||'').replace(/[<>&"']/g,'')},</p><p>${action}. This secure link expires in 30 minutes and works once.</p><p><a href="${base}/platform/account-password?token=${token}">${action}</a></p><p>If you did not expect this, ignore this email.</p>`);
+  }
   app.get('/start-free',(req,res)=>res.render('start_free.html'));
   app.post('/start-free',asyncRoute(async(req,res)=>{
     const salonName=String(req.body.salon_name||'').trim(),ownerName=String(req.body.owner_name||'').trim();
@@ -27,13 +38,32 @@ module.exports = app => {
   app.get('/platform/login',(req,res)=>req.session.platformAdmin?res.redirect('/platform'):res.render('platform_login.html'));
   app.post('/platform/login',limiter,asyncRoute(async(req,res)=>{
     const username=String(req.body.username||'').trim().toLowerCase();
-    const admin=await db.one("SELECT * FROM platform_admins WHERE username=:username AND status='Active'",{username});
+    const admin=await db.platformOne("SELECT * FROM platform_admins WHERE (LOWER(username)=? OR LOWER(email)=?) AND status='Active'",[username,username]);
     if(admin&&await bcrypt.compare(String(req.body.password||''),admin.password_hash)){
       await new Promise((resolve,reject)=>req.session.regenerate(error=>error?reject(error):resolve()));
       req.session.platformAdmin={id:admin.id,name:admin.name,username:admin.username};
       await db.rows('UPDATE platform_admins SET last_login=NOW() WHERE id=:id',{id:admin.id});return res.redirect('/platform');
     }
     req.flash('error','Incorrect platform administrator credentials.');res.redirect('/platform/login');
+  }));
+  app.get('/platform/forgot-password',(req,res)=>res.render('platform_forgot_password.html'));
+  app.post('/platform/forgot-password',limiter,asyncRoute(async(req,res)=>{
+    const email=String(req.body.email||'').trim().toLowerCase();
+    const admin=validEmail(email)?await db.platformOne("SELECT id,name,email FROM platform_admins WHERE LOWER(email)=? AND status='Active'",[email]):null;
+    if(admin){try{await sendAdminLink(admin,'reset');}catch(error){console.error('Company admin reset email failed:',error.message);}}
+    req.flash('info','If an active Company Admin uses that email, a reset link has been sent.');res.redirect('/platform/forgot-password');
+  }));
+  app.get('/platform/account-password',asyncRoute(async(req,res)=>{
+    const token=String(req.query.token||''),record=token?await db.platformOne('SELECT id,purpose FROM platform_admin_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>NOW()',[tokenHash(token)]):null;
+    res.render('platform_account_password.html',{token:record?token:'',invalid:!record,purpose:record?.purpose||'reset'});
+  }));
+  app.post('/platform/account-password',limiter,asyncRoute(async(req,res)=>{
+    const token=String(req.body.token||''),password=String(req.body.password||''),confirm=String(req.body.confirm_password||'');
+    const record=token?await db.platformOne('SELECT id,admin_id FROM platform_admin_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>NOW()',[tokenHash(token)]):null;
+    if(!record||password.length<8||password!==confirm){req.flash('error','The link is invalid or expired, or the passwords do not match.');return res.redirect(`/platform/account-password?token=${encodeURIComponent(token)}`);}
+    const hash=await bcrypt.hash(password,12);
+    await db.transaction(async connection=>{await connection.execute("UPDATE platform_admins SET password_hash=?,status='Active' WHERE id=?",[hash,record.admin_id]);await connection.execute('UPDATE platform_admin_tokens SET used_at=NOW() WHERE id=?',[record.id]);});
+    req.flash('success','Company Admin password saved. You can sign in now.');res.redirect('/platform/login');
   }));
   app.post('/platform/logout',platformAuth,(req,res)=>req.session.destroy(()=>res.redirect('/platform/login')));
   app.get('/platform',platformAuth,asyncRoute(async(req,res)=>{
@@ -55,6 +85,32 @@ module.exports = app => {
     configured:Boolean(process.env.SMTP_USER&&process.env.SMTP_PASSWORD),
     sender:process.env.SMTP_FROM||process.env.SMTP_USER||'',
     senderName:process.env.SMTP_FROM_NAME||'Aura Salon OS',
+  }));
+  app.get('/platform/admins',platformAuth,asyncRoute(async(req,res)=>{
+    const admins=await db.platformRows('SELECT id,name,username,email,status,last_login,created_at FROM platform_admins ORDER BY id');
+    res.render('platform_admins.html',{admins,platform_admin:req.session.platformAdmin});
+  }));
+  app.post('/platform/admins/invite',platformAuth,asyncRoute(async(req,res)=>{
+    const name=String(req.body.name||'').trim(),username=String(req.body.username||'').trim().toLowerCase(),email=String(req.body.email||'').trim().toLowerCase();
+    if(!name||!validUsername(username)||!validEmail(email)){req.flash('error','Enter a name, valid username and real email address.');return res.redirect('/platform/admins');}
+    if(await db.platformOne('SELECT id FROM platform_admins WHERE LOWER(username)=? OR LOWER(email)=?',[username,email])){req.flash('error','That username or email is already used.');return res.redirect('/platform/admins');}
+    const placeholder=await bcrypt.hash(crypto.randomBytes(32).toString('hex'),12);
+    const result=await db.platformRows("INSERT INTO platform_admins(name,username,email,password_hash,status) VALUES(?,?,?,?,'Invited')",[name,username,email,placeholder]);
+    const admin={id:result.insertId,name,email};
+    try{await sendAdminLink(admin,'invite');req.flash('success',`Invitation sent to ${email}.`);}catch(error){req.flash('error',`Admin created, but invitation failed: ${error.message}`);}
+    res.redirect('/platform/admins');
+  }));
+  app.post('/platform/admins/:id/resend',platformAuth,asyncRoute(async(req,res)=>{
+    const admin=await db.platformOne("SELECT id,name,email FROM platform_admins WHERE id=? AND status='Invited'",[Number(req.params.id)]);
+    if(!admin||!admin.email){req.flash('error','Invited administrator not found.');return res.redirect('/platform/admins');}
+    try{await sendAdminLink(admin,'invite');req.flash('success',`Invitation resent to ${admin.email}.`);}catch(error){req.flash('error',`Invitation failed: ${error.message}`);}res.redirect('/platform/admins');
+  }));
+  app.post('/platform/admins/:id/deactivate',platformAuth,asyncRoute(async(req,res)=>{
+    const id=Number(req.params.id);
+    if(id===Number(req.session.platformAdmin.id)){req.flash('error','You cannot deactivate your current session.');return res.redirect('/platform/admins');}
+    const count=await db.platformOne("SELECT COUNT(*) count FROM platform_admins WHERE status='Active'");
+    if(Number(count.count)<=1){req.flash('error','Aura must always have at least one active Company Admin.');return res.redirect('/platform/admins');}
+    await db.platformRows("UPDATE platform_admins SET status='Inactive' WHERE id=?",[id]);req.flash('success','Company Admin deactivated.');res.redirect('/platform/admins');
   }));
   app.post('/platform/email/test',platformAuth,asyncRoute(async(req,res)=>{
     const recipient=String(req.body.recipient||'').trim().toLowerCase();

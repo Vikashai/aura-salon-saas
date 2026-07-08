@@ -100,12 +100,15 @@ async function main() {
     JOIN salons s ON s.id=u.salon_id
     SET u.email=s.owner_email
     WHERE u.email IS NULL OR u.email=''`);
+  const [platformEmailColumn] = await connection.query("SHOW COLUMNS FROM platform_admins LIKE 'email'");
+  if (!platformEmailColumn.length) await connection.query('ALTER TABLE platform_admins ADD COLUMN email VARCHAR(190) NULL UNIQUE AFTER username');
+  await connection.query("ALTER TABLE platform_admins MODIFY status ENUM('Invited','Active','Inactive') NOT NULL DEFAULT 'Active'");
   const [[{ count: platformAdminCount }]] = await connection.query('SELECT COUNT(*) AS count FROM platform_admins');
   if (!platformAdminCount && process.env.INITIAL_PLATFORM_ADMIN_PASSWORD) {
     const platformHash = await bcrypt.hash(process.env.INITIAL_PLATFORM_ADMIN_PASSWORD, 12);
     await connection.execute(
-      "INSERT INTO platform_admins (name,username,password_hash,status) VALUES (?,?,?,'Active')",
-      [process.env.INITIAL_PLATFORM_ADMIN_NAME || 'Platform Admin', process.env.INITIAL_PLATFORM_ADMIN_USERNAME || 'platform-admin', platformHash],
+      "INSERT INTO platform_admins (name,username,email,password_hash,status) VALUES (?,?,?,?,'Active')",
+      [process.env.INITIAL_PLATFORM_ADMIN_NAME || 'Platform Admin', process.env.INITIAL_PLATFORM_ADMIN_USERNAME || 'platform-admin',process.env.INITIAL_PLATFORM_ADMIN_EMAIL||null,platformHash],
     );
   }
   const [[{ count }]] = await connection.execute('SELECT COUNT(*) AS count FROM users WHERE salon_id=?',[salonId]);
