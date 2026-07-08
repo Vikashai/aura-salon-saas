@@ -87,7 +87,6 @@ app.use(async (req, res, next) => {
     const environmentOverrides = {
       meta_whatsapp_token: process.env.META_WHATSAPP_TOKEN,
       meta_phone_number_id: process.env.META_PHONE_NUMBER_ID,
-      smtp_pass: process.env.SMTP_PASSWORD,
       twilio_token: process.env.TWILIO_AUTH_TOKEN,
     };
     for (const [key, value] of Object.entries(environmentOverrides)) if (value) cfg[key] = value;

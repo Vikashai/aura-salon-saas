@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { rateLimit } = require('express-rate-limit');
 const db = require('../db');
 const { asyncRoute } = require('../helpers');
+const { sendPlatformEmail } = require('../notifications');
 
 const platformAuth = (req,res,next) => req.session.platformAdmin ? next() : res.redirect('/platform/login');
 const slugify = value => String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70) || 'salon';
@@ -48,6 +49,21 @@ module.exports = app => {
     const today=Date.now(),week=7*86400000;
     const stats={total:salons.length,active:salons.filter(s=>s.status==='Active'&&(!s.access_ends_at||new Date(s.access_ends_at).getTime()>=today)).length,pending:applications.filter(a=>a.status==='New').length,overdue:salons.filter(s=>s.payment_status==='Overdue').length,customers:salons.reduce((sum,s)=>sum+Number(s.customer_count||0),0),users:salons.reduce((sum,s)=>sum+Number(s.user_count||0),0),month_sales:salons.reduce((sum,s)=>sum+Number(s.month_sales||0),0),expiring:salons.filter(s=>s.access_ends_at&&new Date(s.access_ends_at).getTime()>=today&&new Date(s.access_ends_at).getTime()<=today+week).length};
     res.render('platform_dashboard.html',{applications,salons,stats,platform_admin:req.session.platformAdmin});
+  }));
+  app.get('/platform/email',platformAuth,(req,res)=>res.render('platform_email.html',{
+    platform_admin:req.session.platformAdmin,
+    configured:Boolean(process.env.SMTP_USER&&process.env.SMTP_PASSWORD),
+    sender:process.env.SMTP_FROM||process.env.SMTP_USER||'',
+    senderName:process.env.SMTP_FROM_NAME||'Aura Salon OS',
+  }));
+  app.post('/platform/email/test',platformAuth,asyncRoute(async(req,res)=>{
+    const recipient=String(req.body.recipient||'').trim().toLowerCase();
+    if(!/^\S+@\S+\.\S+$/.test(recipient)){req.flash('error','Enter a valid recipient email.');return res.redirect('/platform/email');}
+    try{
+      const result=await sendPlatformEmail(recipient,'Aura Salon OS email test','<h2>Aura Salon OS</h2><p>Your company email connection is working correctly.</p><p>Password resets and platform notifications can now be delivered through this sender.</p>');
+      req.flash(result.ok?'success':'error',result.ok?`Test email sent to ${recipient}.`:`Email test failed: ${result.message}`);
+    }catch(error){req.flash('error',`Email test failed: ${error.message}`);}
+    res.redirect('/platform/email');
   }));
   app.get('/platform/salons/:id',platformAuth,asyncRoute(async(req,res)=>{
     const id=Number(req.params.id),salon=await db.one('SELECT * FROM salons WHERE id=:id',{id});if(!salon)return res.status(404).send('Salon not found');

@@ -7,7 +7,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { asyncRoute, isoDate, firstName } = require('../helpers');
-const { sendWhatsApp } = require('../notifications');
+const { sendWhatsApp, sendEmail } = require('../notifications');
 const { auth, loyaltyConfig, awardPoints } = require('./shared');
 const upload = multer({ storage:multer.memoryStorage(), limits:{ fileSize:5*1024*1024 } });
 
@@ -247,5 +247,14 @@ module.exports = app => {
   app.post('/settings/capacity-pools/:id',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,id=Number(req.params.id),name=String(req.body[`pool_name_${id}`]||'').trim(),seats=Number.parseInt(req.body[`pool_seats_${id}`],10);if(!name||!Number.isInteger(seats)||seats<1){req.flash('error','Enter a pool name and a seat count of at least 1.');return res.redirect('/settings#capacity');}await db.rows('UPDATE capacity_pools SET name=:name,seats=:seats WHERE id=:id AND salon_id=:salonId',{salonId,name,seats,id});req.flash('success','Capacity pool updated.');res.redirect('/settings#capacity');}));
   app.post('/settings/capacity-pools/:id/delete',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id,id=Number(req.params.id),pool=await db.one('SELECT is_default FROM capacity_pools WHERE id=:id AND salon_id=:salonId',{id,salonId});if(!pool){req.flash('error','Capacity pool not found.');return res.redirect('/settings#capacity');}if(pool.is_default){req.flash('error','The default pool cannot be deleted.');return res.redirect('/settings#capacity');}await db.rows('UPDATE services SET capacity_pool_id=NULL WHERE capacity_pool_id=:id AND salon_id=:salonId',{id,salonId});await db.rows('DELETE FROM capacity_pools WHERE id=:id AND salon_id=:salonId',{id,salonId});req.flash('success','Capacity pool removed. Services using it now use the default pool.');res.redirect('/settings#capacity');}));
   app.post('/settings',auth,asyncRoute(async(req,res)=>{const salonId=req.user.salon_id;for(const key of SETTINGS_KEYS){const value=req.body[key]||'';if(['meta_whatsapp_token','twilio_token','smtp_pass'].includes(key)&&!value)continue;await db.rows('INSERT INTO settings (salon_id,`key`,`value`) VALUES (:salonId,:key,:value) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)',{salonId,key,value});}req.flash('success','Settings updated.');res.redirect('/settings');}));
+  app.post('/settings/email/test',auth,asyncRoute(async(req,res)=>{
+    const recipient=String(req.body.email_test_recipient||'').trim().toLowerCase();
+    if(!/^\S+@\S+\.\S+$/.test(recipient)){req.flash('error','Enter a valid recipient email.');return res.redirect('/settings#email');}
+    try{
+      const result=await sendEmail(req.settings,recipient,`Email connection test from ${req.settings.salon_name||'Aura Salon'}`,`<p>Your salon email connection is working.</p><p>This test was sent from the email configuration saved inside your Aura workspace.</p>`);
+      req.flash(result.ok?'success':'error',result.ok?`Test email sent to ${recipient}.`:`Email test failed: ${result.message}`);
+    }catch(error){req.flash('error',`Email test failed: ${error.message}`);}
+    res.redirect('/settings#email');
+  }));
   app.post('/settings/whatsapp/test',auth,asyncRoute(async(req,res)=>{const recipient=String(req.body.test_recipient||'').trim();const meta=(req.settings.whatsapp_provider||'meta')==='meta';const settings=meta?{...req.settings,meta_template_language:'en_US'}:req.settings;const result=await sendWhatsApp(settings,recipient,'WhatsApp connection test from Aura Salon OS.',meta?'hello_world':null,[]);req.flash(result.ok?'success':'error',result.ok?`WhatsApp test accepted. Message ID: ${result.message}`:`WhatsApp test failed: ${result.message}`);res.redirect('/settings#whatsapp');}));
 };

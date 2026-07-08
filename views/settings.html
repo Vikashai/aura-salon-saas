@@ -84,6 +84,14 @@
       <label>App password<input name="smtp_pass" type="password" value="" placeholder="{% if data.get('smtp_pass_configured') %}Configured — leave blank to keep{% else %}16-char app password{% endif %}"></label>
       <label class="span-2">From address (display)<input name="smtp_from" value="{{data.get('smtp_from','')}}" placeholder="Leave blank to use username"></label>
     </div>
+    <div style="border-top:1px solid #e5e8e1;margin-top:20px;padding-top:18px">
+      <strong style="font-size:13px">Test this salon's saved email connection</strong>
+      <p style="color:#737970;margin:5px 0 12px;font-size:12px">Save the SMTP settings first. This test uses only this salon workspace's sender.</p>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+        <label style="flex:1;min-width:220px">Recipient email<input type="email" name="email_test_recipient" placeholder="owner@example.com"></label>
+        <button class="btn ghost" type="submit" formaction="/settings/email/test" formmethod="post">Send test email</button>
+      </div>
+    </div>
   </div>
 
   <div class="form-card" id="whatsapp">
