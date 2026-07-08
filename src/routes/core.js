@@ -134,6 +134,7 @@ module.exports = app => {
       const values = Object.fromEntries(CUSTOMER_FIELDS.map(field => [field, req.body[field] || null]));
       values.mobile = normalizeIndianMobile(values.mobile);
       values.alt_mobile = normalizeIndianMobile(values.alt_mobile) || null;
+      values.email = String(values.email || '').trim().toLowerCase() || null;
       if (!values.mobile) {
         req.flash('error', 'WhatsApp mobile number is required.');
         return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');
@@ -145,6 +146,22 @@ module.exports = app => {
       if (!/^\d{10}$/.test(values.mobile) || (values.alt_mobile && !/^\d{10}$/.test(values.alt_mobile))) {
         req.flash('error', 'Enter a valid 10-digit mobile number.');
         return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');
+      }
+      if (values.alt_mobile && values.alt_mobile === values.mobile) {
+        req.flash('error', 'Primary and alternate mobile numbers must be different.');
+        return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');
+      }
+      const duplicateNumber = await db.one(`SELECT id,name FROM customers
+        WHERE salon_id=:salonId AND id<>COALESCE(:cid,0)
+          AND (mobile=:mobile OR alt_mobile=:mobile OR (:altMobile IS NOT NULL AND (mobile=:altMobile OR alt_mobile=:altMobile)))
+        LIMIT 1`,{salonId,cid,mobile:values.mobile,altMobile:values.alt_mobile});
+      if (duplicateNumber) {
+        req.flash('error', `That contact number already belongs to ${duplicateNumber.name}.`);
+        return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');
+      }
+      if (values.email) {
+        const duplicateEmail=await db.one(`SELECT id,name FROM customers WHERE salon_id=:salonId AND id<>COALESCE(:cid,0) AND LOWER(email)=LOWER(:email) LIMIT 1`,{salonId,cid,email:values.email});
+        if(duplicateEmail){req.flash('error',`That email address already belongs to ${duplicateEmail.name}.`);return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');}
       }
       for (const dateField of ['dob', 'anniversary']) if (!values[dateField]) values[dateField] = null;
       const referredById = req.body.referred_by_id || null;
