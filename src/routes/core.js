@@ -306,6 +306,14 @@ module.exports = app => {
         if(!sent.ok)req.flash('error',`Invoice WhatsApp failed: ${sent.message}`);
       }
     }
+    if(String(req.settings.billing_auto_email||'0')==='1'&&customerId){
+      const customer=await db.one('SELECT name,mobile,email,address,city,state FROM customers WHERE id=:customerId AND salon_id=:salonId',{customerId,salonId});
+      if(customer?.email){
+        const salon=req.settings.salon_name||'Aura Salon',sale={id:result,invoice_no:invoiceNo,invoice_date:req.body.invoice_date,customer:customer.name,mobile:customer.mobile,email:customer.email,address:customer.address,city:customer.city,state:customer.state,payment_mode:paymentMode,payment_status:paymentStatus,subtotal,discount,gst_enabled:gst,gst_percent:gstPercent,tax_amount:tax,final_amount:finalAmount,paid_amount:paid,pending_amount:pending,notes:req.body.notes||null};
+        const pdfItems=normalizedLines.map(line=>({item_name:line.name,item_type:line.type,quantity:line.quantity,price:line.price,discount:0,staff_name:line.staff}));
+        try{const pdf=await generateInvoicePdf(sale,pdfItems,req.settings),sent=await sendEmail(req.settings,customer.email,`${invoiceNo} from ${salon}`,`<p>Hi ${customer.name||'Customer'},</p><p>Thank you for visiting ${salon}. Your invoice is attached as a PDF.</p>`,[{filename:`${invoiceNo}.pdf`,content:pdf,contentType:'application/pdf'}]);if(!sent.ok)req.flash('error',`Invoice email failed: ${sent.message}`);}catch(error){req.flash('error',`Invoice email failed: ${error.message}`);}
+      }
+    }
     req.flash('success', `${invoiceNo} created successfully.`);
     res.redirect(`/billing/${result}`);
   }));
