@@ -111,6 +111,17 @@ async function main() {
       [process.env.INITIAL_PLATFORM_ADMIN_NAME || 'Platform Admin', process.env.INITIAL_PLATFORM_ADMIN_USERNAME || 'platform-admin',process.env.INITIAL_PLATFORM_ADMIN_EMAIL||null,platformHash],
     );
   }
+  if (process.env.PLATFORM_BOOTSTRAP_EMAIL) {
+    const email=String(process.env.PLATFORM_BOOTSTRAP_EMAIL).trim().toLowerCase();
+    const username=String(process.env.PLATFORM_BOOTSTRAP_USERNAME||'').trim().toLowerCase();
+    const name=String(process.env.PLATFORM_BOOTSTRAP_NAME||'').trim();
+    if (!/^\S+@\S+\.\S+$/.test(email) || !/^[a-z0-9._-]{3,40}$/.test(username) || !name) {
+      throw new Error('PLATFORM_BOOTSTRAP_NAME, PLATFORM_BOOTSTRAP_USERNAME and PLATFORM_BOOTSTRAP_EMAIL must be valid.');
+    }
+    await connection.execute(`UPDATE platform_admins
+      SET name=?,username=?,email=?
+      WHERE id=(SELECT id FROM (SELECT MIN(id) id FROM platform_admins) bootstrap) AND (email IS NULL OR email='')`,[name,username,email]);
+  }
   const [[{ count }]] = await connection.execute('SELECT COUNT(*) AS count FROM users WHERE salon_id=?',[salonId]);
   if (!count) {
     if (!process.env.INITIAL_ADMIN_PASSWORD) throw new Error('INITIAL_ADMIN_PASSWORD is required for the first admin account.');
