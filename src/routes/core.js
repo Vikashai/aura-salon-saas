@@ -70,14 +70,14 @@ module.exports = app => {
   app.get('/forgot-password',(req,res)=>res.render('forgot_password.html'));
   app.post('/forgot-password',resetLimiter,asyncRoute(async(req,res)=>{
     const email=String(req.body.email||'').trim().toLowerCase();
-    if(!/^\S+@\S+\.\S+$/.test(email)){req.flash('error','Enter a valid email address.');return res.redirect('/forgot-password');}
+    if(!/^\S+@\S+\.\S+$/.test(email))return res.status(400).render('forgot_password.html',{email,error:'Enter a valid email address.'});
     const users=await db.platformRows(`SELECT u.id,u.salon_id,u.name,u.email,s.name salon_name
       FROM users u JOIN salons s ON s.id=u.salon_id
       WHERE LOWER(u.email)=? AND u.status='Active' AND s.status='Active'
         AND (s.access_starts_at IS NULL OR s.access_starts_at<=NOW())
         AND (s.access_ends_at IS NULL OR s.access_ends_at>=NOW())`,[email]);
-    if(users.length===0){req.flash('error','No active Aura account was found for this email address.');return res.redirect('/forgot-password');}
-    if(users.length>1){req.flash('error','More than one Aura account uses this email. Please contact support to clean up access.');return res.redirect('/forgot-password');}
+    if(users.length===0)return res.status(404).render('forgot_password.html',{email,error:'No active Aura account was found for this email address.'});
+    if(users.length>1)return res.status(409).render('forgot_password.html',{email,error:'More than one Aura account uses this email. Please contact support to clean up access.'});
     const user=users[0],otp=crypto.randomInt(0,1000000).toString().padStart(6,'0'),otpHash=crypto.createHash('sha256').update(otp).digest('hex');
     await db.rows('UPDATE password_reset_tokens SET used_at=NOW() WHERE salon_id=:salonId AND user_id=:userId AND used_at IS NULL',{salonId:user.salon_id,userId:user.id});
     await db.rows('INSERT INTO password_reset_tokens(salon_id,user_id,token_hash,expires_at) VALUES(:salonId,:userId,:otpHash,DATE_ADD(NOW(),INTERVAL 10 MINUTE))',{salonId:user.salon_id,userId:user.id,otpHash});
