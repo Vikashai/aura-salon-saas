@@ -1,1 +1,77 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Account recovery · Aura Company</title><style>*{box-sizing:border-box}body{margin:0;background:#f5f6f1;color:#20211f;font:14px Arial,sans-serif}.wrap{width:min(760px,calc(100% - 32px));margin:45px auto}.back{color:#62685f;text-decoration:none;font-weight:700}.card{background:#fff;border:1px solid #dfe3da;border-radius:22px;padding:28px;margin-top:18px}h1{margin:0 0 8px}p{color:#6e746c;line-height:1.55}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}label{font-weight:700}input{display:block;width:100%;margin-top:7px;padding:12px;border:1px solid #dfe3da;border-radius:10px;font:inherit}.full{grid-column:1/-1}.btn{border:0;border-radius:11px;background:#dfff3f;padding:13px 18px;font-weight:800;cursor:pointer}.flash{padding:12px;border-radius:10px;background:#e5f4d8;color:#3d711e;margin:15px 0}.flash.error{background:#fde8e7;color:#9c2d27}@media(max-width:620px){.grid{grid-template-columns:1fr}.full{grid-column:auto}}</style></head><body><main class="wrap"><a class="back" href="/platform">← Company overview</a><section class="card"><h1>Recover a salon account</h1><p>Set the user’s sign-in email and a temporary password. Their existing sessions will be revoked and they must change the temporary password after signing in.</p>{% for cat,msg in flashes %}<div class="flash {{cat}}">{{msg}}</div>{% endfor %}<form method="post" class="grid"><label>Salon slug<input required name="salon_slug" placeholder="raja-rani"></label><label>Username<input required name="username" placeholder="admin"></label><label class="full">User email<input required type="email" name="email" placeholder="owner@example.com"></label><label class="full">Temporary password<input required type="password" name="password" minlength="8" autocomplete="new-password"></label><div class="full"><button class="btn">Save recovery access</button></div></form></section></main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Account recovery · Aura Company</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f5f6f1;color:#20211f;font:14px Arial,sans-serif}.wrap{width:min(820px,calc(100% - 32px));margin:45px auto}.back{color:#62685f;text-decoration:none;font-weight:700}.card{background:#fff;border:1px solid #dfe3da;border-radius:22px;padding:28px;margin-top:18px}h1{margin:0 0 8px}p{color:#6e746c;line-height:1.55}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}label{font-weight:700}input,select{display:block;width:100%;margin-top:7px;padding:12px;border:1px solid #dfe3da;border-radius:10px;background:#fff;font:inherit}select:disabled{background:#f6f7f4;color:#8a9087}.full{grid-column:1/-1}.hint{display:block;margin-top:7px;color:#777d74;font-size:12px;font-weight:400}.btn{border:0;border-radius:11px;background:#dfff3f;padding:13px 18px;font-weight:800;cursor:pointer}.flash{padding:12px;border-radius:10px;background:#e5f4d8;color:#3d711e;margin:15px 0}.flash.error{background:#fde8e7;color:#9c2d27}@media(max-width:620px){.grid{grid-template-columns:1fr}.full{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <a class="back" href="/platform">← Company overview</a>
+    <section class="card">
+      <h1>Recover a salon account</h1>
+      <p>Select the salon and user, then set their sign-in email and a temporary password. Existing sessions will be revoked and they must change the temporary password after signing in.</p>
+      {% for cat,msg in flashes %}<div class="flash {{cat}}">{{msg}}</div>{% endfor %}
+      <form method="post" class="grid">
+        <label class="full">Salon
+          <select required name="salon_id" id="salon-select">
+            <option value="">Select a salon</option>
+            {% for salon in salons %}
+              <option value="{{salon.id}}">{{salon.name}} · {{salon.slug}} · {{salon.status}}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="full">User account
+          <select required name="user_id" id="user-select" disabled>
+            <option value="">Select a salon first</option>
+            {% for user in users %}
+              <option value="{{user.id}}" data-salon="{{user.salon_id}}">
+                {{user.name or user.username}} · {{user.username}} · {{user.role}} · {{user.status}}{% if user.email %} · {{user.email}}{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+          <span class="hint">Only users from the selected salon will appear here.</span>
+        </label>
+        <label class="full">New sign-in email
+          <input required type="email" name="email" placeholder="owner@example.com">
+        </label>
+        <label class="full">Temporary password
+          <input required type="password" name="password" minlength="8" autocomplete="new-password">
+        </label>
+        <div class="full"><button class="btn">Save recovery access</button></div>
+      </form>
+    </section>
+  </main>
+  <script>
+    const salonSelect=document.getElementById('salon-select');
+    const userSelect=document.getElementById('user-select');
+    const placeholder=userSelect.options[0];
+    function filterUsers(){
+      const salonId=salonSelect.value;
+      let first='';
+      placeholder.hidden=Boolean(salonId);
+      placeholder.disabled=Boolean(salonId);
+      for(const option of Array.from(userSelect.options).slice(1)){
+        const show=Boolean(salonId)&&option.dataset.salon===salonId;
+        option.hidden=!show;
+        option.disabled=!show;
+        if(show&&!first) first=option.value;
+      }
+      userSelect.disabled=!salonId||!first;
+      userSelect.value=first||'';
+      if(!first&&salonId){
+        placeholder.hidden=false;
+        placeholder.disabled=false;
+        placeholder.textContent='No users found for this salon';
+      } else {
+        placeholder.textContent='Select a salon first';
+      }
+    }
+    salonSelect.addEventListener('change',filterUsers);
+    filterUsers();
+  </script>
+</body>
+</html>

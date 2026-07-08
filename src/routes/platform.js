@@ -19,6 +19,15 @@ async function uniqueSlug(name) {
 
 module.exports = app => {
   const limiter=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
+  async function recoveryContext(req) {
+    const [salons,users]=await Promise.all([
+      db.platformRows('SELECT id,name,slug,status FROM salons ORDER BY name, id'),
+      db.platformRows(`SELECT u.id,u.salon_id,u.name,u.username,u.email,u.role,u.status
+        FROM users u JOIN salons s ON s.id=u.salon_id
+        ORDER BY s.name,u.name,u.username,u.id`)
+    ]);
+    return {platform_admin:req.session.platformAdmin,salons,users};
+  }
   async function sendAdminLink(admin,purpose) {
     const token=crypto.randomBytes(32).toString('hex'),hash=tokenHash(token);
     await db.platformRows('UPDATE platform_admin_tokens SET used_at=NOW() WHERE admin_id=? AND used_at IS NULL',[admin.id]);
@@ -173,12 +182,14 @@ module.exports = app => {
   app.post('/platform/applications/:id/reject',platformAuth,asyncRoute(async(req,res)=>{
     await db.rows("UPDATE salon_applications SET status='Rejected',reviewed_at=NOW() WHERE id=:id AND status='New'",{id:Number(req.params.id)});req.flash('success','Application rejected.');res.redirect('/platform');
   }));
-  app.get('/platform/recovery',platformAuth,(req,res)=>res.render('platform_recovery.html',{platform_admin:req.session.platformAdmin}));
+  app.get('/platform/recovery',platformAuth,asyncRoute(async(req,res)=>res.render('platform_recovery.html',await recoveryContext(req))));
   app.post('/platform/recovery',platformAuth,asyncRoute(async(req,res)=>{
-    const salonSlug=String(req.body.salon_slug||'').trim().toLowerCase(),username=String(req.body.username||'').trim().toLowerCase();
+    const salonId=Number(req.body.salon_id||0),userId=Number(req.body.user_id||0);
     const email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');
-    const user=await db.platformOne(`SELECT u.id,u.salon_id,u.username,s.name salon_name FROM users u JOIN salons s ON s.id=u.salon_id WHERE s.slug=? AND LOWER(u.username)=?`,[salonSlug,username]);
-    if(!user||!/^\S+@\S+\.\S+$/.test(email)||password.length<8){req.flash('error','Enter a valid salon slug, username, email and temporary password of at least 8 characters.');return res.redirect('/platform/recovery');}
+    const user=await db.platformOne(`SELECT u.id,u.salon_id,u.username,u.name,s.name salon_name
+      FROM users u JOIN salons s ON s.id=u.salon_id
+      WHERE u.id=? AND u.salon_id=?`,[userId,salonId]);
+    if(!user||!/^\S+@\S+\.\S+$/.test(email)||password.length<8){req.flash('error','Select a salon, user account, valid email and temporary password of at least 8 characters.');return res.redirect('/platform/recovery');}
     const duplicate=await db.platformOne('SELECT id FROM users WHERE LOWER(email)=? AND id<>?',[email,user.id]);
     if(duplicate){req.flash('error','That email is already connected to another Aura user.');return res.redirect('/platform/recovery');}
     const passwordHash=await bcrypt.hash(password,12);
