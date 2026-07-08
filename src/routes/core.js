@@ -64,31 +64,27 @@ module.exports = app => {
         AND (s.access_starts_at IS NULL OR s.access_starts_at<=NOW())
         AND (s.access_ends_at IS NULL OR s.access_ends_at>=NOW())`,[email]);
     if(users.length===1&&/^\S+@\S+\.\S+$/.test(email)){
-      const user=users[0],token=crypto.randomBytes(32).toString('hex'),tokenHash=crypto.createHash('sha256').update(token).digest('hex');
+      const user=users[0],otp=crypto.randomInt(0,1000000).toString().padStart(6,'0'),otpHash=crypto.createHash('sha256').update(otp).digest('hex');
       await db.rows('UPDATE password_reset_tokens SET used_at=NOW() WHERE salon_id=:salonId AND user_id=:userId AND used_at IS NULL',{salonId:user.salon_id,userId:user.id});
-      await db.rows('INSERT INTO password_reset_tokens(salon_id,user_id,token_hash,expires_at) VALUES(:salonId,:userId,:tokenHash,DATE_ADD(NOW(),INTERVAL 30 MINUTE))',{salonId:user.salon_id,userId:user.id,tokenHash});
-      const base=String(process.env.APP_BASE_URL||'').replace(/\/$/,'');
-      try{await sendPlatformEmail(email,'Reset your Aura password',`<p>Hello ${String(user.name||'').replace(/[<>&"']/g,'')},</p><p>Use this secure link to reset your Aura password. It expires in 30 minutes.</p><p><a href="${base}/reset-password?token=${token}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`);}catch(error){console.error('Password reset email failed:',error.message);}
+      await db.rows('INSERT INTO password_reset_tokens(salon_id,user_id,token_hash,expires_at) VALUES(:salonId,:userId,:otpHash,DATE_ADD(NOW(),INTERVAL 10 MINUTE))',{salonId:user.salon_id,userId:user.id,otpHash});
+      try{await sendPlatformEmail(email,'Your Aura password reset code',`<p>Hello ${String(user.name||'').replace(/[<>&"']/g,'')},</p><p>Your Aura password reset code is:</p><p style="font-size:28px;font-weight:800;letter-spacing:6px">${otp}</p><p>This code expires in 10 minutes and works once. If you did not request it, ignore this email.</p>`);}catch(error){console.error('Password reset email failed:',error.message);}
     }
-    req.flash('info','If an active Aura account uses that email, a reset link has been sent.');
-    res.redirect('/forgot-password');
+    req.session.passwordResetEmail=email;
+    req.flash('info','If an active Aura account uses that email, a six-digit code has been sent.');
+    res.redirect('/reset-password');
   }));
-  app.get('/reset-password',asyncRoute(async(req,res)=>{
-    const token=String(req.query.token||''),tokenHash=crypto.createHash('sha256').update(token).digest('hex');
-    const reset=token?await db.platformOne(`SELECT id FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>NOW()`,[tokenHash]):null;
-    res.render('reset_password.html',{token:reset?token:'',invalid:!reset});
-  }));
+  app.get('/reset-password',(req,res)=>res.render('reset_password.html',{email:req.session.passwordResetEmail||''}));
   app.post('/reset-password',resetLimiter,asyncRoute(async(req,res)=>{
-    const token=String(req.body.token||''),password=String(req.body.password||''),confirm=String(req.body.confirm_password||'');
-    const tokenHash=crypto.createHash('sha256').update(token).digest('hex');
-    const reset=token?await db.platformOne(`SELECT id,salon_id,user_id FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>NOW()`,[tokenHash]):null;
-    if(!reset||password.length<8||password!==confirm){req.flash('error','The link is invalid or expired, or the passwords do not match.');return res.redirect(`/reset-password?token=${encodeURIComponent(token)}`);}
+    const email=String(req.body.email||req.session.passwordResetEmail||'').trim().toLowerCase(),otp=String(req.body.otp||'').replace(/\D/g,''),password=String(req.body.password||''),confirm=String(req.body.confirm_password||'');
+    const otpHash=crypto.createHash('sha256').update(otp).digest('hex');
+    const reset=otp.length===6?await db.platformOne(`SELECT t.id,t.salon_id,t.user_id FROM password_reset_tokens t JOIN users u ON u.id=t.user_id AND u.salon_id=t.salon_id WHERE LOWER(u.email)=? AND t.token_hash=? AND t.used_at IS NULL AND t.expires_at>NOW() AND u.status='Active'`,[email,otpHash]):null;
+    if(!reset||password.length<8||password!==confirm){req.flash('error','The code is invalid or expired, or the passwords do not match.');return res.redirect('/reset-password');}
     const passwordHash=await bcrypt.hash(password,12);
     await db.transaction(async connection=>{
       await connection.execute('UPDATE users SET password_hash=?,force_password_change=0,password_changed_at=NOW() WHERE id=? AND salon_id=?',[passwordHash,reset.user_id,reset.salon_id]);
       await connection.execute('UPDATE password_reset_tokens SET used_at=NOW() WHERE id=? AND salon_id=?',[reset.id,reset.salon_id]);
     });
-    req.flash('success','Password reset successfully. You can sign in now.');res.redirect('/login');
+    delete req.session.passwordResetEmail;req.flash('success','Password reset successfully. You can sign in now.');res.redirect('/login');
   }));
   app.get('/logout', auth, (req, res) => req.session.destroy(() => res.redirect('/login')));
   app.get('/change-password',auth,(req,res)=>res.render('change_password.html'));

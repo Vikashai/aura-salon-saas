@@ -50,8 +50,22 @@ module.exports = app => {
   app.post('/platform/forgot-password',limiter,asyncRoute(async(req,res)=>{
     const email=String(req.body.email||'').trim().toLowerCase();
     const admin=validEmail(email)?await db.platformOne("SELECT id,name,email FROM platform_admins WHERE LOWER(email)=? AND status='Active'",[email]):null;
-    if(admin){try{await sendAdminLink(admin,'reset');}catch(error){console.error('Company admin reset email failed:',error.message);}}
-    req.flash('info','If an active Company Admin uses that email, a reset link has been sent.');res.redirect('/platform/forgot-password');
+    if(admin){
+      const otp=crypto.randomInt(0,1000000).toString().padStart(6,'0'),hash=tokenHash(otp);
+      await db.platformRows('UPDATE platform_admin_tokens SET used_at=NOW() WHERE admin_id=? AND used_at IS NULL',[admin.id]);
+      await db.platformRows("INSERT INTO platform_admin_tokens(admin_id,token_hash,purpose,expires_at) VALUES(?,?, 'reset',DATE_ADD(NOW(),INTERVAL 10 MINUTE))",[admin.id,hash]);
+      try{await sendPlatformEmail(admin.email,'Your Aura Company Admin reset code',`<p>Hello ${String(admin.name||'').replace(/[<>&"']/g,'')},</p><p>Your Company Admin password reset code is:</p><p style="font-size:28px;font-weight:800;letter-spacing:6px">${otp}</p><p>This code expires in 10 minutes and works once.</p>`);}catch(error){console.error('Company admin reset email failed:',error.message);}
+    }
+    req.session.platformResetEmail=email;req.flash('info','If an active Company Admin uses that email, a six-digit code has been sent.');res.redirect('/platform/reset-password');
+  }));
+  app.get('/platform/reset-password',(req,res)=>res.render('platform_reset_password.html',{email:req.session.platformResetEmail||''}));
+  app.post('/platform/reset-password',limiter,asyncRoute(async(req,res)=>{
+    const email=String(req.body.email||req.session.platformResetEmail||'').trim().toLowerCase(),otp=String(req.body.otp||'').replace(/\D/g,''),password=String(req.body.password||''),confirm=String(req.body.confirm_password||'');
+    const record=otp.length===6?await db.platformOne(`SELECT t.id,t.admin_id FROM platform_admin_tokens t JOIN platform_admins a ON a.id=t.admin_id WHERE LOWER(a.email)=? AND t.token_hash=? AND t.purpose='reset' AND t.used_at IS NULL AND t.expires_at>NOW() AND a.status='Active'`,[email,tokenHash(otp)]):null;
+    if(!record||password.length<8||password!==confirm){req.flash('error','The code is invalid or expired, or the passwords do not match.');return res.redirect('/platform/reset-password');}
+    const hash=await bcrypt.hash(password,12);
+    await db.transaction(async connection=>{await connection.execute('UPDATE platform_admins SET password_hash=? WHERE id=?',[hash,record.admin_id]);await connection.execute('UPDATE platform_admin_tokens SET used_at=NOW() WHERE id=?',[record.id]);});
+    delete req.session.platformResetEmail;req.flash('success','Company Admin password reset. You can sign in now.');res.redirect('/platform/login');
   }));
   app.get('/platform/account-password',asyncRoute(async(req,res)=>{
     const token=String(req.query.token||''),record=token?await db.platformOne('SELECT id,purpose FROM platform_admin_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>NOW()',[tokenHash(token)]):null;
