@@ -23,11 +23,24 @@ function normalizeIndianMobile(value) {
 module.exports = app => {
   const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false,
     message: 'Too many login attempts. Please try again in 15 minutes.' });
-  app.get('/login', (req, res) => req.session.user ? res.redirect('/dashboard') : res.render('login.html',{salon_slug:req.query.salon||''}));
+  app.get('/login', (req, res) => req.session.user ? res.redirect('/dashboard') : res.render('login.html'));
   app.post('/login', loginLimiter, asyncRoute(async (req, res) => {
-    const username = String(req.body.username || '').trim(),salonSlug=String(req.body.salon||'').trim().toLowerCase();
-    const user = await db.one("SELECT u.*,s.slug salon_slug,s.status salon_status FROM users u JOIN salons s ON s.id=u.salon_id WHERE u.username=:username AND s.slug=:salonSlug AND u.status='Active' AND s.status='Active'", { username,salonSlug });
-    if (user?.password_hash && await bcrypt.compare(String(req.body.password || ''), user.password_hash)) {
+    const username = String(req.body.username || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const candidates = await db.rows(
+      `SELECT u.*,s.slug salon_slug,s.status salon_status
+       FROM users u JOIN salons s ON s.id=u.salon_id
+       WHERE LOWER(u.username)=:username AND u.status='Active' AND s.status='Active'
+         AND (s.access_starts_at IS NULL OR s.access_starts_at<=NOW())
+         AND (s.access_ends_at IS NULL OR s.access_ends_at>=NOW())`,
+      { username },
+    );
+    const matches=[];
+    for (const candidate of candidates) {
+      if (candidate.password_hash && await bcrypt.compare(password,candidate.password_hash)) matches.push(candidate);
+    }
+    const user=matches.length===1?matches[0]:null;
+    if (user) {
       await new Promise((resolve,reject)=>req.session.regenerate(error=>error?reject(error):resolve()));
       req.session.user = { id:user.id,name:user.name,username:user.username,role:user.role,salon_id:user.salon_id,salon_slug:user.salon_slug };
       await db.rows('UPDATE users SET last_login=NOW(),last_activity=NOW() WHERE id=:id AND salon_id=:salonId',{id:user.id,salonId:user.salon_id});
