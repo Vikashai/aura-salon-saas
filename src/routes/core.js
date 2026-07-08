@@ -70,19 +70,20 @@ module.exports = app => {
   app.get('/forgot-password',(req,res)=>res.render('forgot_password.html'));
   app.post('/forgot-password',resetLimiter,asyncRoute(async(req,res)=>{
     const email=String(req.body.email||'').trim().toLowerCase();
+    if(!/^\S+@\S+\.\S+$/.test(email)){req.flash('error','Enter a valid email address.');return res.redirect('/forgot-password');}
     const users=await db.platformRows(`SELECT u.id,u.salon_id,u.name,u.email,s.name salon_name
       FROM users u JOIN salons s ON s.id=u.salon_id
       WHERE LOWER(u.email)=? AND u.status='Active' AND s.status='Active'
         AND (s.access_starts_at IS NULL OR s.access_starts_at<=NOW())
         AND (s.access_ends_at IS NULL OR s.access_ends_at>=NOW())`,[email]);
-    if(users.length===1&&/^\S+@\S+\.\S+$/.test(email)){
-      const user=users[0],otp=crypto.randomInt(0,1000000).toString().padStart(6,'0'),otpHash=crypto.createHash('sha256').update(otp).digest('hex');
-      await db.rows('UPDATE password_reset_tokens SET used_at=NOW() WHERE salon_id=:salonId AND user_id=:userId AND used_at IS NULL',{salonId:user.salon_id,userId:user.id});
-      await db.rows('INSERT INTO password_reset_tokens(salon_id,user_id,token_hash,expires_at) VALUES(:salonId,:userId,:otpHash,DATE_ADD(NOW(),INTERVAL 10 MINUTE))',{salonId:user.salon_id,userId:user.id,otpHash});
-      try{await sendPlatformEmail(email,'Your Aura password reset code',`<p>Hello ${String(user.name||'').replace(/[<>&"']/g,'')},</p><p>Your Aura password reset code is:</p><p style="font-size:28px;font-weight:800;letter-spacing:6px">${otp}</p><p>This code expires in 10 minutes and works once. If you did not request it, ignore this email.</p>`);}catch(error){console.error('Password reset email failed:',error.message);}
-    }
+    if(users.length===0){req.flash('error','No active Aura account was found for this email address.');return res.redirect('/forgot-password');}
+    if(users.length>1){req.flash('error','More than one Aura account uses this email. Please contact support to clean up access.');return res.redirect('/forgot-password');}
+    const user=users[0],otp=crypto.randomInt(0,1000000).toString().padStart(6,'0'),otpHash=crypto.createHash('sha256').update(otp).digest('hex');
+    await db.rows('UPDATE password_reset_tokens SET used_at=NOW() WHERE salon_id=:salonId AND user_id=:userId AND used_at IS NULL',{salonId:user.salon_id,userId:user.id});
+    await db.rows('INSERT INTO password_reset_tokens(salon_id,user_id,token_hash,expires_at) VALUES(:salonId,:userId,:otpHash,DATE_ADD(NOW(),INTERVAL 10 MINUTE))',{salonId:user.salon_id,userId:user.id,otpHash});
+    try{await sendPlatformEmail(email,'Your Aura password reset code',`<p>Hello ${String(user.name||'').replace(/[<>&"']/g,'')},</p><p>Your Aura password reset code is:</p><p style="font-size:28px;font-weight:800;letter-spacing:6px">${otp}</p><p>This code expires in 10 minutes and works once. If you did not request it, ignore this email.</p>`);}catch(error){console.error('Password reset email failed:',error.message);}
     req.session.passwordResetEmail=email;
-    req.flash('info','If an active Aura account uses that email, a six-digit code has been sent.');
+    req.flash('info','A six-digit code has been sent to that email address.');
     res.redirect('/reset-password');
   }));
   app.get('/reset-password',(req,res)=>res.render('reset_password.html',{email:req.session.passwordResetEmail||''}));
