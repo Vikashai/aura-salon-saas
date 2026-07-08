@@ -95,11 +95,12 @@ module.exports = app => {
     const today = isoDate();
     const salonId=req.user.salon_id;
     const month = today.slice(0, 7);
+    const monthStart = `${month}-01`;
     const stats = {
       today: (await db.one('SELECT COALESCE(SUM(final_amount),0) value FROM sales WHERE salon_id=:salonId AND invoice_date=:today AND cancelled=0', {salonId,today})).value,
-      month: (await db.one("SELECT COALESCE(SUM(final_amount),0) value FROM sales WHERE salon_id=:salonId AND DATE_FORMAT(invoice_date,'%Y-%m')=:month AND cancelled=0", {salonId,month})).value,
+      month: (await db.one('SELECT COALESCE(SUM(final_amount),0) value FROM sales WHERE salon_id=:salonId AND invoice_date>=:monthStart AND invoice_date<DATE_ADD(:monthStart,INTERVAL 1 MONTH) AND cancelled=0', {salonId,monthStart})).value,
       customers: (await db.one('SELECT COUNT(*) value FROM customers WHERE salon_id=:salonId AND archived=0',{salonId})).value,
-      new: (await db.one("SELECT COUNT(*) value FROM customers WHERE salon_id=:salonId AND DATE_FORMAT(created_at,'%Y-%m')=:month", {salonId,month})).value,
+      new: (await db.one('SELECT COUNT(*) value FROM customers WHERE salon_id=:salonId AND created_at>=:monthStart AND created_at<DATE_ADD(:monthStart,INTERVAL 1 MONTH)', {salonId,monthStart})).value,
       pending: (await db.one('SELECT COALESCE(SUM(pending_amount),0) value FROM sales WHERE salon_id=:salonId AND cancelled=0',{salonId})).value,
       appts_today: (await db.one("SELECT COUNT(*) value FROM appointments WHERE salon_id=:salonId AND appointment_date=:today AND status NOT IN ('cancelled','no_show')", {salonId,today})).value,
     };
