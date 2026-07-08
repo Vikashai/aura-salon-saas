@@ -256,5 +256,5 @@ module.exports = app => {
     }catch(error){req.flash('error',`Email test failed: ${error.message}`);}
     res.redirect('/settings#email');
   }));
-  app.post('/settings/whatsapp/test',auth,asyncRoute(async(req,res)=>{const recipient=String(req.body.test_recipient||'').trim();const meta=(req.settings.whatsapp_provider||'meta')==='meta';const settings=meta?{...req.settings,meta_template_language:'en_US'}:req.settings;const result=await sendWhatsApp(settings,recipient,'WhatsApp connection test from Aura Salon OS.',meta?'hello_world':null,[]);req.flash(result.ok?'success':'error',result.ok?`WhatsApp test accepted. Message ID: ${result.message}`:`WhatsApp test failed: ${result.message}`);res.redirect('/settings#whatsapp');}));
+  app.post('/settings/whatsapp/test',auth,asyncRoute(async(req,res)=>{const recipient=String(req.body.test_recipient||'').trim();const result=await sendWhatsApp(req.settings,recipient,'WhatsApp connection test from Aura Salon OS.',null,[]);req.flash(result.ok?'success':'error',result.ok?`WhatsApp test accepted. Message ID: ${result.message}`:`WhatsApp test failed: ${result.message}`);res.redirect('/settings#whatsapp');}));
 };
