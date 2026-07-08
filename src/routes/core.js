@@ -133,8 +133,12 @@ module.exports = app => {
       const values = Object.fromEntries(CUSTOMER_FIELDS.map(field => [field, req.body[field] || null]));
       values.mobile = normalizeIndianMobile(values.mobile);
       values.alt_mobile = normalizeIndianMobile(values.alt_mobile) || null;
-      if (!values.mobile || !values.email) {
-        req.flash('error', 'WhatsApp mobile number and email are both required.');
+      if (!values.mobile) {
+        req.flash('error', 'WhatsApp mobile number is required.');
+        return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');
+      }
+      if (values.email && !/^\S+@\S+\.\S+$/.test(values.email)) {
+        req.flash('error', 'Enter a valid email address or leave it blank.');
         return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');
       }
       if (!/^\d{10}$/.test(values.mobile) || (values.alt_mobile && !/^\d{10}$/.test(values.alt_mobile))) {
@@ -289,6 +293,18 @@ module.exports = app => {
       }
       return sale.insertId;
     });
+    if(String(req.settings.billing_auto_whatsapp||'0')==='1'&&customerId){
+      const customer=await db.one('SELECT name,mobile FROM customers WHERE id=:customerId AND salon_id=:salonId',{customerId,salonId});
+      const template=String(req.settings.meta_template_invoice||'').trim();
+      if(!template)req.flash('error','Invoice WhatsApp was not sent: configure an approved invoice template in Settings.');
+      else if(customer?.mobile){
+        const salon=req.settings.salon_name||'Aura Salon';
+        const parameters=[customer.name||'Customer',invoiceNo,salon,`Rs ${Number(finalAmount).toLocaleString('en-IN')}`,`Rs ${Number(paid).toLocaleString('en-IN')}`,`Rs ${Number(pending).toLocaleString('en-IN')}`,req.body.invoice_date];
+        const message=`Invoice ${invoiceNo} from ${salon}. Total: ${parameters[3]}; Paid: ${parameters[4]}; Balance: ${parameters[5]}.`;
+        const sent=await sendWhatsApp(req.settings,customer.mobile,message,template,parameters);
+        if(!sent.ok)req.flash('error',`Invoice WhatsApp failed: ${sent.message}`);
+      }
+    }
     req.flash('success', `${invoiceNo} created successfully.`);
     res.redirect(`/billing/${result}`);
   }));
@@ -321,7 +337,9 @@ module.exports = app => {
     if(!sale)return res.status(404).send('Invoice not found');
     const salon=req.settings.salon_name||'Aura Salon',itemText=items.map(item=>`${item.item_name} x ${Number(item.quantity)} - ₹${(Number(item.quantity)*Number(item.price)).toLocaleString('en-IN')}`).join('\n');
     const message=`Hi ${sale.customer||'Customer'},\n\nInvoice ${sale.invoice_no} from ${salon}\n${itemText}\n\nTotal: ₹${Number(sale.final_amount).toLocaleString('en-IN')}\nPaid: ₹${Number(sale.paid_amount).toLocaleString('en-IN')}\nBalance: ₹${Number(sale.pending_amount).toLocaleString('en-IN')}\nDate: ${sale.invoice_date}\n\nThank you for visiting ${salon}.`;
-    let result;try{if(channel==='whatsapp')result=await sendWhatsApp(req.settings,sale.mobile,message,null,[]);else if(channel==='email')result=await sendEmail(req.settings,sale.email,`${sale.invoice_no} from ${salon}`,`<p>Hi ${sale.customer||'Customer'},</p><p>Thank you for visiting ${salon}.</p><pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${message}</pre>`);else return res.status(404).send('Not found');}catch(error){result={ok:false,message:error.message};}
+    const invoiceTemplate=String(req.settings.meta_template_invoice||'').trim();
+    const invoiceParameters=[sale.customer||'Customer',sale.invoice_no,salon,`Rs ${Number(sale.final_amount).toLocaleString('en-IN')}`,`Rs ${Number(sale.paid_amount).toLocaleString('en-IN')}`,`Rs ${Number(sale.pending_amount).toLocaleString('en-IN')}`,sale.invoice_date];
+    let result;try{if(channel==='whatsapp')result=await sendWhatsApp(req.settings,sale.mobile,message,invoiceTemplate||null,invoiceTemplate?invoiceParameters:[]);else if(channel==='email')result=await sendEmail(req.settings,sale.email,`${sale.invoice_no} from ${salon}`,`<p>Hi ${sale.customer||'Customer'},</p><p>Thank you for visiting ${salon}.</p><pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${message}</pre>`);else return res.status(404).send('Not found');}catch(error){result={ok:false,message:error.message};}
     req.flash(result.ok?'success':'error',result.ok?`Invoice sent by ${channel==='whatsapp'?'WhatsApp':'email'}.`:`Could not send by ${channel==='whatsapp'?'WhatsApp':'email'}: ${result.message}`);res.redirect(`/billing/${sid}`);
   }));
   app.get('/api/referral/:cid',auth,asyncRoute(async(req,res)=>{const cid=Number(req.params.cid),salonId=req.user.salon_id,customer=await db.one('SELECT referral_credit,referred_by_id FROM customers WHERE id=:cid AND salon_id=:salonId',{cid,salonId});if(!customer)return res.status(404).json({error:'Customer not found'});const prior=await db.one('SELECT COUNT(*) count FROM sales WHERE salon_id=:salonId AND customer_id=:cid AND cancelled=0',{cid,salonId}),cfg=referralConfig(req.settings);res.json({balance:Number(customer.referral_credit||0),eligible:Number(prior.count)===0,existing_referrer_id:customer.referred_by_id||null,referrer_credit:cfg.referrer_credit,referee_discount:cfg.referee_discount});}));

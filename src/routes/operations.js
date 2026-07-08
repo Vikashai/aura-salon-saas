@@ -22,7 +22,7 @@ const SETTINGS_KEYS = ['salon_name','invoice_prefix','gst_number','tax_enabled',
   'salon_phone','salon_email','business_open','business_close','slot_interval','smtp_host','smtp_port','smtp_user',
   'smtp_pass','smtp_from','whatsapp_provider','meta_whatsapp_token','meta_phone_number_id','meta_api_version',
   'meta_template_language','meta_template_confirmation','meta_template_reminder','meta_template_cancellation',
-  'meta_template_welcome','meta_template_birthday','meta_template_anniversary','twilio_sid','twilio_token',
+  'meta_template_invoice','billing_auto_whatsapp','meta_template_welcome','meta_template_birthday','meta_template_anniversary','twilio_sid','twilio_token',
   'twilio_whatsapp_from','base_url','loyalty_enabled','loyalty_earn_rate','loyalty_redeem_rate',
   'loyalty_min_redeem','loyalty_max_redeem_pct','loyalty_expiry_months','loyalty_referral_referrer',
   'loyalty_referral_referee','referral_referrer_credit','referral_referee_discount','loyalty_earn_on_services','loyalty_earn_on_products','msg_welcome','msg_birthday','msg_anniversary'];

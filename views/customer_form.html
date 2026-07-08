@@ -5,7 +5,7 @@
 <label>Full name*<input required name="name" value="{{row.name if row else ''}}"></label>
 <label>WhatsApp mobile number*<input required type="tel" inputmode="numeric" pattern="[0-9]{10}" minlength="10" maxlength="10" name="mobile" placeholder="10-digit number" value="{{row.mobile if row else ''}}" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"></label>
 <label>Alternate mobile<input type="tel" inputmode="numeric" pattern="[0-9]{10}" minlength="10" maxlength="10" name="alt_mobile" placeholder="10-digit number" value="{{row.alt_mobile if row else ''}}" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"></label>
-<label>Email*<input required type="email" name="email" value="{{row.email if row else ''}}"></label>
+<label>Email <small>(optional)</small><input type="email" name="email" value="{{row.email if row else ''}}"></label>
 <label>Gender<select name="gender">{% for v in ['Female','Male','Non-binary','Prefer not to say'] %}<option {% if row and row.gender==v %}selected{% endif %}>{{v}}</option>{% endfor %}</select></label>
 <label>Date of birth<input type="date" name="dob" value="{{row.dob if row else ''}}"></label>
 <label>Anniversary<input type="date" name="anniversary" value="{{row.anniversary if row else ''}}"></label>
