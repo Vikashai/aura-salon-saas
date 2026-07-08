@@ -98,6 +98,17 @@ async function sendEmail(settings, recipient, subject, html) {
   return { channel: 'email', ok: true, message: info.messageId };
 }
 
+async function sendPlatformEmail(recipient, subject, html) {
+  return sendEmail({
+    salon_name: process.env.SMTP_FROM_NAME || 'Aura Salon OS',
+    smtp_host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    smtp_port: process.env.SMTP_PORT || '587',
+    smtp_user: process.env.SMTP_USER || '',
+    smtp_pass: process.env.SMTP_PASSWORD || '',
+    smtp_from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+  }, recipient, subject, html);
+}
+
 function bookingValues(settings, appointment, type) {
   const time = fmtTime(appointment.appointment_time);
   const staff = appointment.staff_name || 'Any Available';
@@ -136,4 +147,4 @@ async function sendBookingNotifications(settings, appointment, type) {
   return results;
 }
 
-module.exports = { normalizeNumber, validNumber, sendWhatsApp, sendEmail, sendBookingNotifications };
+module.exports = { normalizeNumber, validNumber, sendWhatsApp, sendEmail, sendPlatformEmail, sendBookingNotifications };

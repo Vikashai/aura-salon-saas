@@ -1,9 +1,10 @@
 'use strict';
 const bcrypt = require('bcryptjs');
+const crypto = require('node:crypto');
 const { rateLimit } = require('express-rate-limit');
 const db = require('../db');
 const { asyncRoute, isoDate, firstName } = require('../helpers');
-const { sendWhatsApp, sendEmail } = require('../notifications');
+const { sendWhatsApp, sendEmail, sendPlatformEmail } = require('../notifications');
 const { auth, loyaltyConfig, referralConfig, awardPoints, adjustReferralCredit, referralCode } = require('./shared');
 const { audit } = require('../access');
 const { money, calculateBaseTotals, applyRewards, paymentFromForm } = require('../billing-calculations');
@@ -27,10 +28,10 @@ module.exports = app => {
   app.post('/login', loginLimiter, asyncRoute(async (req, res) => {
     const username = String(req.body.username || '').trim().toLowerCase();
     const password = String(req.body.password || '');
-    const candidates = await db.rows(
+    const candidates = await db.platformRows(
       `SELECT u.*,s.slug salon_slug,s.status salon_status
        FROM users u JOIN salons s ON s.id=u.salon_id
-       WHERE LOWER(u.username)=:username AND u.status='Active' AND s.status='Active'
+       WHERE (LOWER(u.username)=:username OR LOWER(u.email)=:username) AND u.status='Active' AND s.status='Active'
          AND (s.access_starts_at IS NULL OR s.access_starts_at<=NOW())
          AND (s.access_ends_at IS NULL OR s.access_ends_at>=NOW())`,
       { username },
@@ -42,7 +43,7 @@ module.exports = app => {
     const user=matches.length===1?matches[0]:null;
     if (user) {
       await new Promise((resolve,reject)=>req.session.regenerate(error=>error?reject(error):resolve()));
-      req.session.user = { id:user.id,name:user.name,username:user.username,role:user.role,salon_id:user.salon_id,salon_slug:user.salon_slug };
+      req.session.user = { id:user.id,name:user.name,username:user.username,role:user.role,salon_id:user.salon_id,salon_slug:user.salon_slug,password_changed_at:user.password_changed_at||null };
       await db.rows('UPDATE users SET last_login=NOW(),last_activity=NOW() WHERE id=:id AND salon_id=:salonId',{id:user.id,salonId:user.salon_id});
       await audit(user.id,'auth.login','user',user.id,'Successful login',req);
       const target = req.session.returnTo || '/dashboard';
@@ -51,6 +52,43 @@ module.exports = app => {
     }
     req.flash('error', 'Incorrect username or password.');
     return res.redirect('/login');
+  }));
+  const resetLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false,
+    message: 'Too many password reset attempts. Please try again in 15 minutes.' });
+  app.get('/forgot-password',(req,res)=>res.render('forgot_password.html'));
+  app.post('/forgot-password',resetLimiter,asyncRoute(async(req,res)=>{
+    const email=String(req.body.email||'').trim().toLowerCase();
+    const users=await db.platformRows(`SELECT u.id,u.salon_id,u.name,u.email,s.name salon_name
+      FROM users u JOIN salons s ON s.id=u.salon_id
+      WHERE LOWER(u.email)=? AND u.status='Active' AND s.status='Active'
+        AND (s.access_starts_at IS NULL OR s.access_starts_at<=NOW())
+        AND (s.access_ends_at IS NULL OR s.access_ends_at>=NOW())`,[email]);
+    if(users.length===1&&/^\S+@\S+\.\S+$/.test(email)){
+      const user=users[0],token=crypto.randomBytes(32).toString('hex'),tokenHash=crypto.createHash('sha256').update(token).digest('hex');
+      await db.rows('UPDATE password_reset_tokens SET used_at=NOW() WHERE salon_id=:salonId AND user_id=:userId AND used_at IS NULL',{salonId:user.salon_id,userId:user.id});
+      await db.rows('INSERT INTO password_reset_tokens(salon_id,user_id,token_hash,expires_at) VALUES(:salonId,:userId,:tokenHash,DATE_ADD(NOW(),INTERVAL 30 MINUTE))',{salonId:user.salon_id,userId:user.id,tokenHash});
+      const base=String(process.env.APP_BASE_URL||'').replace(/\/$/,'');
+      try{await sendPlatformEmail(email,'Reset your Aura password',`<p>Hello ${String(user.name||'').replace(/[<>&"']/g,'')},</p><p>Use this secure link to reset your Aura password. It expires in 30 minutes.</p><p><a href="${base}/reset-password?token=${token}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`);}catch(error){console.error('Password reset email failed:',error.message);}
+    }
+    req.flash('info','If an active Aura account uses that email, a reset link has been sent.');
+    res.redirect('/forgot-password');
+  }));
+  app.get('/reset-password',asyncRoute(async(req,res)=>{
+    const token=String(req.query.token||''),tokenHash=crypto.createHash('sha256').update(token).digest('hex');
+    const reset=token?await db.platformOne(`SELECT id FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>NOW()`,[tokenHash]):null;
+    res.render('reset_password.html',{token:reset?token:'',invalid:!reset});
+  }));
+  app.post('/reset-password',resetLimiter,asyncRoute(async(req,res)=>{
+    const token=String(req.body.token||''),password=String(req.body.password||''),confirm=String(req.body.confirm_password||'');
+    const tokenHash=crypto.createHash('sha256').update(token).digest('hex');
+    const reset=token?await db.platformOne(`SELECT id,salon_id,user_id FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>NOW()`,[tokenHash]):null;
+    if(!reset||password.length<8||password!==confirm){req.flash('error','The link is invalid or expired, or the passwords do not match.');return res.redirect(`/reset-password?token=${encodeURIComponent(token)}`);}
+    const passwordHash=await bcrypt.hash(password,12);
+    await db.transaction(async connection=>{
+      await connection.execute('UPDATE users SET password_hash=?,force_password_change=0,password_changed_at=NOW() WHERE id=? AND salon_id=?',[passwordHash,reset.user_id,reset.salon_id]);
+      await connection.execute('UPDATE password_reset_tokens SET used_at=NOW() WHERE id=? AND salon_id=?',[reset.id,reset.salon_id]);
+    });
+    req.flash('success','Password reset successfully. You can sign in now.');res.redirect('/login');
   }));
   app.get('/logout', auth, (req, res) => req.session.destroy(() => res.redirect('/login')));
   app.get('/change-password',auth,(req,res)=>res.render('change_password.html'));

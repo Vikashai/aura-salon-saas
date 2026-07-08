@@ -40,8 +40,9 @@ async function accessMiddleware(req,res,next){
   try{
     const user=await db.one('SELECT * FROM users WHERE id=:id AND salon_id=:salonId',{id:req.session.user.id,salonId:req.session.user.salon_id});
     if(!user||user.status!=='Active'){return req.session.destroy(()=>res.redirect('/login'));}
+    if(user.password_changed_at&&String(req.session.user.password_changed_at||'')!==String(user.password_changed_at))return req.session.destroy(()=>res.redirect('/login'));
     if(!req.salon||Number(req.salon.id)!==Number(user.salon_id))return req.session.destroy(()=>res.redirect('/login'));
-    user.role=normalizeRole(user.role);req.user=user;req.session.user={id:user.id,name:user.name,username:user.username,role:user.role,staff_id:user.staff_id||null,salon_id:user.salon_id,salon_slug:req.salon.slug};
+    user.role=normalizeRole(user.role);req.user=user;req.session.user={id:user.id,name:user.name,username:user.username,role:user.role,staff_id:user.staff_id||null,salon_id:user.salon_id,salon_slug:req.salon.slug,password_changed_at:user.password_changed_at||null};
     res.locals.current_user={...req.session.user,is_authenticated:true};res.locals.can=permission=>can(user,permission);
     if(user.force_password_change&&!['/change-password','/logout'].includes(req.path))return res.redirect('/change-password');
     const permission=routePermission(req);if(permission&&!can(user,permission))return res.status(403).render('access_denied.html',{permission});

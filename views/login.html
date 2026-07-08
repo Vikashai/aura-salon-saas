@@ -26,11 +26,12 @@ input:focus{border-color:#a6b856;box-shadow:0 0 0 3px #eaf7b5}
   <p class="sub">Use your Aura account to open your salon dashboard</p>
   {% for cat,msg in flashes %}<div class="toast {{cat}}">{{msg}}</div>{% endfor %}
   <form method="POST">
-    <label>Username<input name="username" type="text" required autofocus autocomplete="username" placeholder="Your Aura username"></label>
+    <label>Email or username<input name="username" type="text" required autofocus autocomplete="username" placeholder="name@company.com"></label>
     <label>Password<input name="password" type="password" required placeholder="••••••••"></label>
     <label class="remember"><input type="checkbox" name="remember"> Remember me for 30 days</label>
     <button type="submit" class="btn-primary">Sign in →</button>
   </form>
+  <p style="text-align:center;margin:16px 0 0"><a href="/forgot-password" style="color:#5e635d;font-weight:600">Forgot password?</a></p>
   <p class="hint">Aura automatically opens the salon connected to your account.</p>
 </div>
 </body></html>

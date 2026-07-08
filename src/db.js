@@ -17,11 +17,12 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
 });
 
-const TENANT_TABLES=['customers','sales','sale_items','capacity_pools','services','staff','service_staff','products','packages','expenses','users','audit_logs','settings','appointments','loyalty_transactions','referral_credit_transactions'];
+const TENANT_TABLES=['customers','sales','sale_items','capacity_pools','services','staff','service_staff','products','packages','expenses','users','audit_logs','settings','appointments','loyalty_transactions','referral_credit_transactions','password_reset_tokens'];
 const tenantTablePattern=new RegExp(`\\b(?:${TENANT_TABLES.join('|')})\\b`,'i');
 function assertTenantScoped(sql) {
   const text=String(sql||'');
-  if(tenantTablePattern.test(text)&&!/[.`]salon_id\b|\bsalon_id\b/i.test(text))throw new Error('Tenant-owned query is missing salon_id scope');
+  const safeIdentityLookup=/^\s*SELECT\s+id\s+FROM\s+users\s+WHERE\s+LOWER\((?:username|email)\)=/i.test(text);
+  if(tenantTablePattern.test(text)&&!/[.`]salon_id\b|\bsalon_id\b/i.test(text)&&!safeIdentityLookup)throw new Error('Tenant-owned query is missing salon_id scope');
 }
 
 async function rows(sql, params = {}) {

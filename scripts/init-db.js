@@ -79,9 +79,10 @@ async function main() {
     if (!found.length) await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
   const userColumns = [
-    ['staff_id','INT UNSIGNED NULL AFTER status'], ['permissions','JSON NULL AFTER staff_id'],
+    ['email','VARCHAR(190) NULL AFTER username'], ['staff_id','INT UNSIGNED NULL AFTER status'], ['permissions','JSON NULL AFTER staff_id'],
     ['force_password_change','TINYINT(1) NOT NULL DEFAULT 0 AFTER permissions'],
     ['last_login','DATETIME NULL AFTER force_password_change'], ['last_activity','DATETIME NULL AFTER last_login'],
+    ['password_changed_at','DATETIME NULL AFTER last_activity'],
     ['created_by','INT UNSIGNED NULL AFTER last_activity'], ['created_at','TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER created_by'],
   ];
   for (const [column, definition] of userColumns) {
@@ -94,6 +95,11 @@ async function main() {
   for (const [key, value] of Object.entries(defaults)) {
     await connection.execute('INSERT IGNORE INTO settings (salon_id,`key`,`value`) VALUES (?,?,?)', [salonId,key,value]);
   }
+  await connection.query(`UPDATE users u
+    JOIN (SELECT salon_id,MIN(id) id FROM users WHERE LOWER(role) IN ('owner','admin') GROUP BY salon_id) primary_user ON primary_user.id=u.id
+    JOIN salons s ON s.id=u.salon_id
+    SET u.email=s.owner_email
+    WHERE u.email IS NULL OR u.email=''`);
   const [[{ count: platformAdminCount }]] = await connection.query('SELECT COUNT(*) AS count FROM platform_admins');
   if (!platformAdminCount && process.env.INITIAL_PLATFORM_ADMIN_PASSWORD) {
     const platformHash = await bcrypt.hash(process.env.INITIAL_PLATFORM_ADMIN_PASSWORD, 12);
@@ -107,8 +113,8 @@ async function main() {
     if (!process.env.INITIAL_ADMIN_PASSWORD) throw new Error('INITIAL_ADMIN_PASSWORD is required for the first admin account.');
     const passwordHash = await bcrypt.hash(process.env.INITIAL_ADMIN_PASSWORD, 12);
     await connection.execute(
-      "INSERT INTO users (salon_id,name,username,password_hash,role,status) VALUES (?,'Admin','admin',?,'owner','Active')",
-      [salonId,passwordHash],
+      "INSERT INTO users (salon_id,name,username,email,password_hash,role,status) VALUES (?,'Admin','admin',?,?,'owner','Active')",
+      [salonId,process.env.DEFAULT_SALON_EMAIL || 'owner@example.com',passwordHash],
     );
   }
   await connection.end();

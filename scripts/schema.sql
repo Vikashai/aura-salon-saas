@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS expenses (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS users (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, salon_id INT UNSIGNED NOT NULL, name VARCHAR(150), username VARCHAR(100),
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, salon_id INT UNSIGNED NOT NULL, name VARCHAR(150), username VARCHAR(100), email VARCHAR(190) NULL,
   password_hash VARCHAR(255), role VARCHAR(50), status VARCHAR(30) DEFAULT 'Active',
   staff_id INT UNSIGNED NULL, permissions JSON NULL, force_password_change TINYINT(1) DEFAULT 0,
   last_login DATETIME NULL, last_activity DATETIME NULL, created_by INT UNSIGNED NULL,
@@ -136,6 +136,16 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT fk_user_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE,
   CONSTRAINT fk_user_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE SET NULL,
   UNIQUE KEY uq_user_username (salon_id,username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  salon_id INT UNSIGNED NOT NULL, user_id INT UNSIGNED NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE, expires_at DATETIME NOT NULL, used_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_reset_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE,
+  CONSTRAINT fk_reset_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_reset_user (salon_id,user_id,expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS audit_logs (

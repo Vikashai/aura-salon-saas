@@ -79,12 +79,25 @@ module.exports = app => {
     await db.transaction(async connection=>{
       await connection.execute("INSERT INTO capacity_pools(salon_id,name,seats,is_default) VALUES(?,'General',1,1)",[result.insertId]);
       await connection.execute("INSERT INTO settings(salon_id,`key`,`value`) SELECT ?,`key`,`value` FROM settings WHERE salon_id=(SELECT MIN(id) FROM salons WHERE status='Active') ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)",[result.insertId]);
-      await connection.execute("INSERT INTO users(salon_id,name,username,password_hash,role,status,force_password_change) VALUES(?,?,?,?, 'owner','Active',1)",[result.insertId,application.owner_name,ownerUsername,passwordHash]);
+      await connection.execute("INSERT INTO users(salon_id,name,username,email,password_hash,role,status,force_password_change) VALUES(?,?,?,?,?, 'owner','Active',1)",[result.insertId,application.owner_name,ownerUsername,application.email,passwordHash]);
     });
     req.flash('success',`${application.salon_name} approved. Workspace: ${slug}; owner username: ${ownerUsername}; temporary password: ${temporaryPassword}`);res.redirect('/platform');
   }));
   app.post('/platform/applications/:id/reject',platformAuth,asyncRoute(async(req,res)=>{
     await db.rows("UPDATE salon_applications SET status='Rejected',reviewed_at=NOW() WHERE id=:id AND status='New'",{id:Number(req.params.id)});req.flash('success','Application rejected.');res.redirect('/platform');
+  }));
+  app.get('/platform/recovery',platformAuth,(req,res)=>res.render('platform_recovery.html',{platform_admin:req.session.platformAdmin}));
+  app.post('/platform/recovery',platformAuth,asyncRoute(async(req,res)=>{
+    const salonSlug=String(req.body.salon_slug||'').trim().toLowerCase(),username=String(req.body.username||'').trim().toLowerCase();
+    const email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');
+    const user=await db.platformOne(`SELECT u.id,u.salon_id,u.username,s.name salon_name FROM users u JOIN salons s ON s.id=u.salon_id WHERE s.slug=? AND LOWER(u.username)=?`,[salonSlug,username]);
+    if(!user||!/^\S+@\S+\.\S+$/.test(email)||password.length<8){req.flash('error','Enter a valid salon slug, username, email and temporary password of at least 8 characters.');return res.redirect('/platform/recovery');}
+    const duplicate=await db.platformOne('SELECT id FROM users WHERE LOWER(email)=? AND id<>?',[email,user.id]);
+    if(duplicate){req.flash('error','That email is already connected to another Aura user.');return res.redirect('/platform/recovery');}
+    const passwordHash=await bcrypt.hash(password,12);
+    await db.rows('UPDATE users SET email=:email,password_hash=:passwordHash,password_changed_at=NOW(),force_password_change=1 WHERE id=:id AND salon_id=:salonId',{email,passwordHash,id:user.id,salonId:user.salon_id});
+    await db.rows('INSERT INTO audit_logs(salon_id,user_id,action,target_type,target_id,details,ip_address) VALUES(:salonId,NULL,:action,:targetType,:targetId,:details,:ip)',{salonId:user.salon_id,action:'platform.account_recovery',targetType:'user',targetId:user.id,details:`Company admin recovered ${user.username}`,ip:req.ip||null});
+    req.flash('success',`Recovery details saved for ${user.username} at ${user.salon_name}.`);res.redirect('/platform/recovery');
   }));
   app.post('/platform/salons/:id/status',platformAuth,asyncRoute(async(req,res)=>{
     const status=req.body.status==='Active'?'Active':'Suspended';
