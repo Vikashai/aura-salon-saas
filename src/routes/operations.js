@@ -171,14 +171,14 @@ module.exports = app => {
   }));
 
   app.get('/greetings', auth, asyncRoute(async (req,res) => {
-    const salonId=req.user.salon_id,today=new Date(),todayMd=isoDate(today).slice(5);
-    const upcoming=[]; for(let i=1;i<=7;i++){const d=new Date(today);d.setDate(d.getDate()+i);upcoming.push(isoDate(d).slice(5));}
+    const salonId=req.user.salon_id,today=new Date(),monthDay=date=>(date.getMonth()+1)*100+date.getDate(),todayMd=monthDay(today);
+    const upcoming=[]; for(let i=1;i<=7;i++){const d=new Date(today);d.setDate(d.getDate()+i);upcoming.push(monthDay(d));}
     const placeholders=upcoming.map(()=>'?').join(',');
     const [birthdays_today,anniversaries_today,upcoming_birthdays,upcoming_anniversaries,settingsRows]=await Promise.all([
-      db.rows("SELECT * FROM customers WHERE salon_id=? AND DATE_FORMAT(dob,'%m-%d')=? AND status='Active' ORDER BY name",[salonId,todayMd]),
-      db.rows("SELECT * FROM customers WHERE salon_id=? AND DATE_FORMAT(anniversary,'%m-%d')=? AND status='Active' ORDER BY name",[salonId,todayMd]),
-      db.rows(`SELECT * FROM customers WHERE salon_id=? AND DATE_FORMAT(dob,'%m-%d') IN (${placeholders}) AND status='Active' ORDER BY DATE_FORMAT(dob,'%m-%d')`,[salonId,...upcoming]),
-      db.rows(`SELECT * FROM customers WHERE salon_id=? AND DATE_FORMAT(anniversary,'%m-%d') IN (${placeholders}) AND status='Active' ORDER BY DATE_FORMAT(anniversary,'%m-%d')`,[salonId,...upcoming]),
+      db.rows("SELECT * FROM customers WHERE salon_id=? AND (MONTH(dob)*100+DAY(dob))=? AND status='Active' ORDER BY name",[salonId,todayMd]),
+      db.rows("SELECT * FROM customers WHERE salon_id=? AND (MONTH(anniversary)*100+DAY(anniversary))=? AND status='Active' ORDER BY name",[salonId,todayMd]),
+      db.rows(`SELECT * FROM customers WHERE salon_id=? AND (MONTH(dob)*100+DAY(dob)) IN (${placeholders}) AND status='Active' ORDER BY MONTH(dob),DAY(dob)`,[salonId,...upcoming]),
+      db.rows(`SELECT * FROM customers WHERE salon_id=? AND (MONTH(anniversary)*100+DAY(anniversary)) IN (${placeholders}) AND status='Active' ORDER BY MONTH(anniversary),DAY(anniversary)`,[salonId,...upcoming]),
       db.rows('SELECT `key`,`value` FROM settings WHERE salon_id=?',[salonId]),
     ]);
     res.render('greetings.html',{birthdays_today,anniversaries_today,upcoming_birthdays,upcoming_anniversaries,
