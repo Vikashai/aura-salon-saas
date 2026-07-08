@@ -26,7 +26,7 @@ input:focus{border-color:#a6b856;box-shadow:0 0 0 3px #eaf7b5}
   <p class="sub">Use your Aura account to open your salon dashboard</p>
   {% for cat,msg in flashes %}<div class="toast {{cat}}">{{msg}}</div>{% endfor %}
   <form method="POST">
-    <label>Email or username<input name="username" type="text" required autofocus autocomplete="username" placeholder="name@company.com"></label>
+    <label>Email address<input name="email" type="email" required autofocus autocomplete="email" placeholder="name@company.com"></label>
     <label>Password<input name="password" type="password" required placeholder="••••••••"></label>
     <label class="remember"><input type="checkbox" name="remember"> Remember me for 30 days</label>
     <button type="submit" class="btn-primary">Sign in →</button>

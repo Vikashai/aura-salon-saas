@@ -27,15 +27,19 @@ module.exports = app => {
     message: 'Too many login attempts. Please try again in 15 minutes.' });
   app.get('/login', (req, res) => req.session.user ? res.redirect('/dashboard') : res.render('login.html'));
   app.post('/login', loginLimiter, asyncRoute(async (req, res) => {
-    const username = String(req.body.username || '').trim().toLowerCase();
+    const email = String(req.body.email || req.body.username || '').trim().toLowerCase();
     const password = String(req.body.password || '');
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      req.flash('error', 'Enter the email address connected to your Aura account.');
+      return res.redirect('/login');
+    }
     const candidates = await db.platformRows(
       `SELECT u.*,s.slug salon_slug,s.status salon_status
        FROM users u JOIN salons s ON s.id=u.salon_id
-       WHERE (LOWER(u.username)=:username OR LOWER(u.email)=:username) AND u.status='Active' AND s.status='Active'
+       WHERE LOWER(u.email)=:email AND u.status='Active' AND s.status='Active'
          AND (s.access_starts_at IS NULL OR s.access_starts_at<=NOW())
          AND (s.access_ends_at IS NULL OR s.access_ends_at>=NOW())`,
-      { username },
+      { email },
     );
     const matches=[];
     for (const candidate of candidates) {
@@ -51,7 +55,7 @@ module.exports = app => {
       delete req.session.returnTo;
       return res.redirect(target);
     }
-    req.flash('error', 'Incorrect username or password.');
+    req.flash('error', 'Incorrect email or password.');
     return res.redirect('/login');
   }));
   const resetLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false,

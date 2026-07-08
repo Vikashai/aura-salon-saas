@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_user_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE,
   CONSTRAINT fk_user_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE SET NULL,
-  UNIQUE KEY uq_user_username (salon_id,username)
+  UNIQUE KEY uq_user_username (salon_id,username),
+  UNIQUE KEY uq_user_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (

@@ -100,6 +100,13 @@ async function main() {
     JOIN salons s ON s.id=u.salon_id
     SET u.email=s.owner_email
     WHERE u.email IS NULL OR u.email=''`);
+  await connection.query("UPDATE users SET email=NULL WHERE email=''");
+  const [userEmailIndex] = await connection.query("SHOW INDEX FROM users WHERE Key_name='uq_user_email'");
+  if (!userEmailIndex.length) {
+    const [duplicateEmails] = await connection.query("SELECT LOWER(email) email_key,COUNT(*) count FROM users WHERE email IS NOT NULL GROUP BY LOWER(email) HAVING COUNT(*)>1 LIMIT 1");
+    if (!duplicateEmails.length) await connection.query('ALTER TABLE users ADD UNIQUE KEY uq_user_email (email)');
+    else console.warn('Skipped unique users.email index because duplicate emails exist. Resolve duplicates before enforcing email-only login.');
+  }
   const [platformEmailColumn] = await connection.query("SHOW COLUMNS FROM platform_admins LIKE 'email'");
   if (!platformEmailColumn.length) await connection.query('ALTER TABLE platform_admins ADD COLUMN email VARCHAR(190) NULL UNIQUE AFTER username');
   await connection.query("ALTER TABLE platform_admins MODIFY status ENUM('Invited','Active','Inactive') NOT NULL DEFAULT 'Active'");
