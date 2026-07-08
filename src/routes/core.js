@@ -8,6 +8,7 @@ const { sendWhatsApp, sendEmail, sendPlatformEmail } = require('../notifications
 const { auth, loyaltyConfig, referralConfig, awardPoints, adjustReferralCredit, referralCode } = require('./shared');
 const { audit } = require('../access');
 const { money, calculateBaseTotals, applyRewards, paymentFromForm } = require('../billing-calculations');
+const { generateInvoicePdf } = require('../invoice-pdf');
 
 const CUSTOMER_FIELDS = ['name','mobile','alt_mobile','email','gender','dob','anniversary','address','city','state',
   'pincode','preferred_services','preferred_staff','preferred_products','care_notes','allergies','instructions',
@@ -317,6 +318,11 @@ module.exports = app => {
     if (!sale) return res.status(404).send('Invoice not found');
     res.render('invoice.html', { sale, items, settings: req.settings });
   }));
+  app.get('/billing/:sid/pdf',auth,asyncRoute(async(req,res)=>{
+    const sid=Number(req.params.sid),salonId=req.user.salon_id,[sale,items]=await Promise.all([db.one('SELECT s.*,c.name customer,c.mobile,c.email,c.address,c.city,c.state FROM sales s LEFT JOIN customers c ON c.id=s.customer_id AND c.salon_id=s.salon_id WHERE s.id=:sid AND s.salon_id=:salonId',{sid,salonId}),db.rows('SELECT * FROM sale_items WHERE sale_id=:sid AND salon_id=:salonId',{sid,salonId})]);
+    if(!sale)return res.status(404).send('Invoice not found');
+    const pdf=await generateInvoicePdf(sale,items,req.settings);res.type('application/pdf').attachment(`${sale.invoice_no}.pdf`).send(pdf);
+  }));
   app.get('/billing/:sid/edit', auth, asyncRoute(async(req,res)=>{
     const sid=Number(req.params.sid),salonId=req.user.salon_id,sale=await db.one('SELECT s.*,c.name customer FROM sales s LEFT JOIN customers c ON c.id=s.customer_id AND c.salon_id=s.salon_id WHERE s.id=:sid AND s.salon_id=:salonId',{sid,salonId});
     if(!sale)return res.status(404).send('Invoice not found');
@@ -339,7 +345,7 @@ module.exports = app => {
     const message=`Hi ${sale.customer||'Customer'},\n\nInvoice ${sale.invoice_no} from ${salon}\n${itemText}\n\nTotal: ₹${Number(sale.final_amount).toLocaleString('en-IN')}\nPaid: ₹${Number(sale.paid_amount).toLocaleString('en-IN')}\nBalance: ₹${Number(sale.pending_amount).toLocaleString('en-IN')}\nDate: ${sale.invoice_date}\n\nThank you for visiting ${salon}.`;
     const invoiceTemplate=String(req.settings.meta_template_invoice||'').trim();
     const invoiceParameters=[sale.customer||'Customer',sale.invoice_no,salon,`Rs ${Number(sale.final_amount).toLocaleString('en-IN')}`,`Rs ${Number(sale.paid_amount).toLocaleString('en-IN')}`,`Rs ${Number(sale.pending_amount).toLocaleString('en-IN')}`,sale.invoice_date];
-    let result;try{if(channel==='whatsapp')result=await sendWhatsApp(req.settings,sale.mobile,message,invoiceTemplate||null,invoiceTemplate?invoiceParameters:[]);else if(channel==='email')result=await sendEmail(req.settings,sale.email,`${sale.invoice_no} from ${salon}`,`<p>Hi ${sale.customer||'Customer'},</p><p>Thank you for visiting ${salon}.</p><pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${message}</pre>`);else return res.status(404).send('Not found');}catch(error){result={ok:false,message:error.message};}
+    let result;try{if(channel==='whatsapp')result=await sendWhatsApp(req.settings,sale.mobile,message,invoiceTemplate||null,invoiceTemplate?invoiceParameters:[]);else if(channel==='email'){const pdf=await generateInvoicePdf(sale,items,req.settings);result=await sendEmail(req.settings,sale.email,`${sale.invoice_no} from ${salon}`,`<p>Hi ${sale.customer||'Customer'},</p><p>Thank you for visiting ${salon}. Your invoice is attached as a PDF.</p><pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${message}</pre>`,[{filename:`${sale.invoice_no}.pdf`,content:pdf,contentType:'application/pdf'}]);}else return res.status(404).send('Not found');}catch(error){result={ok:false,message:error.message};}
     req.flash(result.ok?'success':'error',result.ok?`Invoice sent by ${channel==='whatsapp'?'WhatsApp':'email'}.`:`Could not send by ${channel==='whatsapp'?'WhatsApp':'email'}: ${result.message}`);res.redirect(`/billing/${sid}`);
   }));
   app.get('/api/referral/:cid',auth,asyncRoute(async(req,res)=>{const cid=Number(req.params.cid),salonId=req.user.salon_id,customer=await db.one('SELECT referral_credit,referred_by_id FROM customers WHERE id=:cid AND salon_id=:salonId',{cid,salonId});if(!customer)return res.status(404).json({error:'Customer not found'});const prior=await db.one('SELECT COUNT(*) count FROM sales WHERE salon_id=:salonId AND customer_id=:cid AND cancelled=0',{cid,salonId}),cfg=referralConfig(req.settings);res.json({balance:Number(customer.referral_credit||0),eligible:Number(prior.count)===0,existing_referrer_id:customer.referred_by_id||null,referrer_credit:cfg.referrer_credit,referee_discount:cfg.referee_discount});}));

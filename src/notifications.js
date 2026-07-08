@@ -78,22 +78,24 @@ async function sendWhatsApp(settings, recipient, message, templateName, paramete
   };
 }
 
-async function sendEmail(settings, recipient, subject, html) {
+async function sendEmail(settings, recipient, subject, html, attachments = []) {
   if (!recipient) return { channel: 'email', ok: false, message: 'No recipient email' };
-  if (!settings.smtp_user || !settings.smtp_pass) {
+  const smtpUser=settings.smtp_user||process.env.SMTP_USER||'',smtpPass=settings.smtp_pass||process.env.SMTP_PASSWORD||'';
+  if (!smtpUser || !smtpPass) {
     return { channel: 'email', ok: false, message: 'SMTP credentials are missing' };
   }
   const transport = nodemailer.createTransport({
-    host: settings.smtp_host || 'smtp.gmail.com',
-    port: Number(settings.smtp_port || 587),
-    secure: Number(settings.smtp_port || 587) === 465,
-    auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+    host: settings.smtp_host || process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(settings.smtp_port || process.env.SMTP_PORT || 587),
+    secure: Number(settings.smtp_port || process.env.SMTP_PORT || 587) === 465,
+    auth: { user:smtpUser, pass:smtpPass },
   });
   const info = await transport.sendMail({
-    from: `${settings.salon_name || 'Aura Salon'} <${settings.smtp_from || settings.smtp_user}>`,
+    from: `${settings.salon_name || process.env.SMTP_FROM_NAME || 'Aura Salon'} <${settings.smtp_from || process.env.SMTP_FROM || smtpUser}>`,
     to: recipient,
     subject,
     html,
+    attachments,
   });
   return { channel: 'email', ok: true, message: info.messageId };
 }
