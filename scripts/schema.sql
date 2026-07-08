@@ -170,6 +170,16 @@ CREATE TABLE IF NOT EXISTS settings (
   PRIMARY KEY (salon_id,`key`), CONSTRAINT fk_setting_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS whatsapp_webhook_events (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, salon_id INT UNSIGNED NOT NULL,
+  event_hash CHAR(64) NOT NULL UNIQUE, phone_number_id VARCHAR(80) NOT NULL,
+  message_id VARCHAR(255), direction ENUM('inbound','status') NOT NULL,
+  event_type VARCHAR(60), delivery_status VARCHAR(40), contact_number VARCHAR(40),
+  payload JSON NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_whatsapp_event_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE,
+  INDEX idx_whatsapp_event_tenant (salon_id,created_at), INDEX idx_whatsapp_message (salon_id,message_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS appointments (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, salon_id INT UNSIGNED NOT NULL, appointment_id VARCHAR(50),
   booking_token VARCHAR(100) UNIQUE, customer_id INT UNSIGNED NULL, customer_name VARCHAR(150) NOT NULL,

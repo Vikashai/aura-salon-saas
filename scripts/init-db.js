@@ -41,7 +41,7 @@ async function main() {
   const salonId = defaultSalon.id;
   const salonColumns=[['payment_status',"ENUM('Pending','Paid','Overdue','Waived') NOT NULL DEFAULT 'Pending' AFTER custom_domain"],['payment_notes','VARCHAR(500) NULL AFTER payment_status'],['access_starts_at','DATETIME NULL AFTER payment_notes'],['access_ends_at','DATETIME NULL AFTER access_starts_at']];
   for(const [column,definition] of salonColumns){const [found]=await connection.query(`SHOW COLUMNS FROM salons LIKE '${column}'`);if(!found.length)await connection.query(`ALTER TABLE salons ADD COLUMN ${column} ${definition}`);}
-  const tenantTables = ['customers','sales','sale_items','capacity_pools','services','staff','service_staff','products','packages','expenses','users','audit_logs','settings','appointments','loyalty_transactions','referral_credit_transactions'];
+  const tenantTables = ['customers','sales','sale_items','capacity_pools','services','staff','service_staff','products','packages','expenses','users','audit_logs','settings','appointments','loyalty_transactions','referral_credit_transactions','whatsapp_webhook_events'];
   for (const table of tenantTables) {
     const [columns] = await connection.query(`SHOW COLUMNS FROM \`${table}\` LIKE 'salon_id'`);
     if (!columns.length) await connection.query(`ALTER TABLE \`${table}\` ADD COLUMN salon_id INT UNSIGNED NULL ${['service_staff','settings'].includes(table)?'FIRST':'AFTER id'}`);

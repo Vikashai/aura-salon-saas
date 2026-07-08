@@ -35,7 +35,9 @@ env.addFilter('brand_on_dark',value=>brandContrast(value)==='#ffffff'?'#ffffff':
 app.set('view engine', 'html');
 app.use('/static', express.static(path.join(__dirname, '..', 'public')));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '1mb', verify: (req, _res, buffer) => {
+  if (req.originalUrl.startsWith('/webhooks/meta/whatsapp')) req.rawBody = Buffer.from(buffer);
+} }));
 
 let databaseInitializationError = null;
 const databaseReady = process.env.AUTO_INIT_DB === 'true'
@@ -85,8 +87,6 @@ app.use(async (req, res, next) => {
     const settingsRows = req.salon ? await db.rows('SELECT `key`, `value` FROM settings WHERE salon_id=:salonId',{salonId:req.salon.id}) : [];
     const cfg = Object.fromEntries(settingsRows.map(row => [row.key, row.value]));
     const environmentOverrides = {
-      meta_whatsapp_token: process.env.META_WHATSAPP_TOKEN,
-      meta_phone_number_id: process.env.META_PHONE_NUMBER_ID,
       twilio_token: process.env.TWILIO_AUTH_TOKEN,
     };
     for (const [key, value] of Object.entries(environmentOverrides)) if (value) cfg[key] = value;
