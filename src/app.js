@@ -9,6 +9,7 @@ const nunjucks = require('nunjucks');
 const { money, fmtTime, mmdd, isoDate } = require('./helpers');
 const db = require('./db');
 const { accessMiddleware } = require('./access');
+const { requestOriginGuard } = require('./request-origin');
 const registerRoutes = require('./routes');
 
 if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') throw new Error('SESSION_SECRET is required');
@@ -49,29 +50,7 @@ app.use(async (_req, _res, next) => {
   return databaseInitializationError ? next(databaseInitializationError) : next();
 });
 
-app.use((req, res, next) => {
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) || req.path.startsWith('/tasks/')) return next();
-  const forwardedSource = req.get('origin') || req.get('referer');
-  if (!forwardedSource) return next();
-  // Managed proxies can append their own value to Origin/Referer. The browser
-  // origin is the first value and is the one that must match the public app.
-  const sourceMatch = String(forwardedSource).match(/https?:\/\/[^,\s"'<>]+/i);
-  const source = sourceMatch ? sourceMatch[0] : String(forwardedSource).split(',')[0].trim();
-  // Some browsers/privacy extensions send an opaque origin for localhost forms.
-  // Permit that only during local development; production remains strict.
-  if (source === 'null' && process.env.NODE_ENV !== 'production') return next();
-  try {
-    const sourceUrl = new URL(source);
-    const allowedHosts = new Set([req.get('host')]);
-    if (process.env.APP_BASE_URL) {
-      try { allowedHosts.add(new URL(process.env.APP_BASE_URL.trim()).host); } catch { /* request host remains authoritative */ }
-    }
-    if (!['http:', 'https:'].includes(sourceUrl.protocol) || !allowedHosts.has(sourceUrl.host)) {
-      return res.status(403).send('Cross-site request blocked');
-    }
-  } catch { return res.status(403).send('Invalid request origin'); }
-  return next();
-});
+app.use(requestOriginGuard());
 
 const store = new MySQLSession({
   host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 3306), database: process.env.DB_NAME,
