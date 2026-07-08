@@ -311,11 +311,10 @@ module.exports = app => {
       }
       return sale.insertId;
     });
-    if(String(req.settings.billing_auto_whatsapp||'0')==='1'&&customerId){
+    if(String(req.settings.whatsapp_invoice_live||'0')==='1'&&String(req.settings.billing_auto_whatsapp||'0')==='1'&&String(req.settings.meta_template_invoice||'').trim()&&customerId){
       const customer=await db.one('SELECT name,mobile FROM customers WHERE id=:customerId AND salon_id=:salonId',{customerId,salonId});
       const template=String(req.settings.meta_template_invoice||'').trim();
-      if(!template)req.flash('error','Invoice WhatsApp was not sent: configure an approved invoice template in Settings.');
-      else if(customer?.mobile){
+      if(customer?.mobile){
         const salon=req.settings.salon_name||'Aura Salon';
         const parameters=[customer.name||'Customer',invoiceNo,salon,`Rs ${Number(finalAmount).toLocaleString('en-IN')}`,`Rs ${Number(paid).toLocaleString('en-IN')}`,`Rs ${Number(pending).toLocaleString('en-IN')}`,req.body.invoice_date];
         const message=`Invoice ${invoiceNo} from ${salon}. Total: ${parameters[3]}; Paid: ${parameters[4]}; Balance: ${parameters[5]}.`;
