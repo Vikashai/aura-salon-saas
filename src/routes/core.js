@@ -391,6 +391,23 @@ module.exports = app => {
     if(!sale)return res.status(404).send('Invoice not found');
     const pdf=await generateInvoicePdf(sale,items,req.settings);res.type('application/pdf').attachment(`${sale.invoice_no}.pdf`).send(pdf);
   }));
+  app.get('/billing/:sid/whatsapp',auth,asyncRoute(async(req,res)=>{
+    const sid=Number(req.params.sid),salonId=req.user.salon_id,sale=await db.one('SELECT s.*,c.name customer,c.mobile FROM sales s LEFT JOIN customers c ON c.id=s.customer_id AND c.salon_id=s.salon_id WHERE s.id=:sid AND s.salon_id=:salonId',{sid,salonId});
+    if(!sale)return res.status(404).send('Invoice not found');
+    let number=String(sale.mobile||'').replace(/\D/g,'');
+    if(number.length===10)number=`91${number}`;
+    if(number.length<8||number.length>15){req.flash('error','Add a valid customer WhatsApp mobile number before opening WhatsApp.');return res.redirect(`/billing/${sid}`);}
+    const salon=req.settings.salon_name||'Aura Salon';
+    const message=[
+      `Hi ${sale.customer||'Customer'},`,
+      `Your invoice ${sale.invoice_no} from ${salon} is ready.`,
+      `Total: Rs ${Number(sale.final_amount||0).toLocaleString('en-IN')}`,
+      `Paid: Rs ${Number(sale.paid_amount||0).toLocaleString('en-IN')}`,
+      `Balance: Rs ${Number(sale.pending_amount||0).toLocaleString('en-IN')}`,
+      'Thank you for visiting us.'
+    ].join('\n');
+    res.redirect(`https://wa.me/${number}?text=${encodeURIComponent(message)}`);
+  }));
   app.get('/billing/:sid/edit', auth, asyncRoute(async(req,res)=>{
     const sid=Number(req.params.sid),salonId=req.user.salon_id,sale=await db.one('SELECT s.*,c.name customer FROM sales s LEFT JOIN customers c ON c.id=s.customer_id AND c.salon_id=s.salon_id WHERE s.id=:sid AND s.salon_id=:salonId',{sid,salonId});
     if(!sale)return res.status(404).send('Invoice not found');
