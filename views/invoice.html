@@ -7,6 +7,7 @@
   <div><strong>Invoice actions</strong><small style="display:block;color:#737970;margin-top:3px">Edit details or send this invoice whenever needed.</small></div>
   <div class="head-actions">
     <a class="btn ghost compact" href="/billing/{{sale.id}}/edit">Edit invoice</a>
+    {% if sale.whatsapp_manual_url %}<a class="btn primary compact" href="{{sale.whatsapp_manual_url}}" target="_blank" rel="noopener">Open WhatsApp</a>{% endif %}
     {% if settings.get('whatsapp_invoice_live')=='1' and settings.get('meta_template_invoice') and settings.get('meta_whatsapp_token') and settings.get('meta_phone_number_id') %}<form method="post" action="/billing/{{sale.id}}/send/whatsapp"><button class="btn primary compact" type="submit">Send via WhatsApp</button></form>{% endif %}
     <form method="post" action="/billing/{{sale.id}}/send/email"><button class="btn ghost compact" type="submit" {% if not sale.email %}disabled title="Add a customer email first"{% endif %}>Send via email</button></form>
   </div>

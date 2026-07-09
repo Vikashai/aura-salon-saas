@@ -370,6 +370,20 @@ module.exports = app => {
       db.rows('SELECT * FROM sale_items WHERE sale_id=:sid AND salon_id=:salonId',{sid,salonId}),
     ]);
     if (!sale) return res.status(404).send('Invoice not found');
+    let whatsappNumber=String(sale.mobile||'').replace(/\D/g,'');
+    if(whatsappNumber.length===10)whatsappNumber=`91${whatsappNumber}`;
+    if(whatsappNumber.length>=8&&whatsappNumber.length<=15){
+      const salon=req.settings.salon_name||'Aura Salon';
+      const message=[
+        `Hi ${sale.customer||'Customer'},`,
+        `Your invoice ${sale.invoice_no} from ${salon} is ready.`,
+        `Total: Rs ${Number(sale.final_amount||0).toLocaleString('en-IN')}`,
+        `Paid: Rs ${Number(sale.paid_amount||0).toLocaleString('en-IN')}`,
+        `Balance: Rs ${Number(sale.pending_amount||0).toLocaleString('en-IN')}`,
+        'Thank you for visiting us.'
+      ].join('\n');
+      sale.whatsapp_manual_url=`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
+    }
     res.render('invoice.html', { sale, items, settings: req.settings });
   }));
   app.get('/billing/:sid/pdf',auth,asyncRoute(async(req,res)=>{
