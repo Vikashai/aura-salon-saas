@@ -197,6 +197,54 @@ module.exports = app => {
     await db.rows('INSERT INTO audit_logs(salon_id,user_id,action,target_type,target_id,details,ip_address) VALUES(:salonId,NULL,:action,:targetType,:targetId,:details,:ip)',{salonId:user.salon_id,action:'platform.account_recovery',targetType:'user',targetId:user.id,details:`Company admin recovered ${user.username}`,ip:req.ip||null});
     req.flash('success',`Recovery details saved for ${user.username} at ${user.salon_name}.`);res.redirect('/platform/recovery');
   }));
+  async function deliveryResetContext(id) {
+    const salon=await db.platformOne('SELECT id,name,slug,status FROM salons WHERE id=?',[id]);
+    if(!salon)return null;
+    const counts={};
+    for(const [key,sql] of Object.entries({
+      customers:'SELECT COUNT(*) value FROM customers WHERE salon_id=?',
+      appointments:'SELECT COUNT(*) value FROM appointments WHERE salon_id=?',
+      invoices:'SELECT COUNT(*) value FROM sales WHERE salon_id=?',
+      invoice_items:'SELECT COUNT(*) value FROM sale_items WHERE salon_id=?',
+      expenses:'SELECT COUNT(*) value FROM expenses WHERE salon_id=?',
+      loyalty:'SELECT COUNT(*) value FROM loyalty_transactions WHERE salon_id=?',
+      referral:'SELECT COUNT(*) value FROM referral_credit_transactions WHERE salon_id=?',
+      whatsapp_events:'SELECT COUNT(*) value FROM whatsapp_webhook_events WHERE salon_id=?',
+      audit_logs:'SELECT COUNT(*) value FROM audit_logs WHERE salon_id=?',
+      password_resets:'SELECT COUNT(*) value FROM password_reset_tokens WHERE salon_id=?',
+      services_kept:'SELECT COUNT(*) value FROM services WHERE salon_id=? AND archived=0',
+      staff_kept:'SELECT COUNT(*) value FROM staff WHERE salon_id=? AND archived=0',
+      products_kept:'SELECT COUNT(*) value FROM products WHERE salon_id=? AND archived=0',
+      packages_kept:'SELECT COUNT(*) value FROM packages WHERE salon_id=? AND archived=0',
+    })){
+      counts[key]=Number((await db.platformOne(sql,[id]))?.value||0);
+    }
+    return {salon,counts};
+  }
+  app.get('/platform/salons/:id/delivery-reset',platformAuth,asyncRoute(async(req,res)=>{
+    const context=await deliveryResetContext(Number(req.params.id));if(!context)return res.status(404).send('Salon not found');
+    const {salon,counts}=context,removable=['customers','appointments','invoices','invoice_items','expenses','loyalty','referral','whatsapp_events','audit_logs','password_resets'],kept=['services_kept','staff_kept','products_kept','packages_kept'];
+    res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Delivery reset · ${salon.name}</title><style>*{box-sizing:border-box}body{margin:0;background:#f5f6f1;color:#20211f;font:14px Arial,sans-serif}.wrap{width:min(900px,calc(100% - 32px));margin:42px auto}.back{color:#62685f;text-decoration:none;font-weight:700}.card{background:#fff;border:1px solid #dfe3da;border-radius:22px;padding:26px;margin-top:18px}h1{margin:0 0 8px}p{color:#686f65;line-height:1.55}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.box{border:1px solid #e5e8e1;border-radius:14px;padding:16px}.box h2{font-size:16px;margin:0 0 12px}dl{display:grid;grid-template-columns:1fr auto;gap:9px 12px;margin:0}dt{color:#62685f}dd{margin:0;font-weight:800}.danger{background:#fff5f4;border-color:#f0c8c3}.safe{background:#f4fbe8;border-color:#d8eabe}label{display:block;font-weight:700;margin-top:18px}input{display:block;width:100%;margin-top:7px;padding:12px;border:1px solid #dfe3da;border-radius:10px;font:inherit}.btn{border:0;border-radius:11px;background:#cf493f;color:#fff;padding:13px 18px;font-weight:800;cursor:pointer;margin-top:14px}.flash{padding:12px;border-radius:10px;background:#e5f4d8;color:#3d711e;margin:15px 0}.flash.error{background:#fde8e7;color:#9c2d27}@media(max-width:720px){.grid{grid-template-columns:1fr}}</style></head><body><main class="wrap"><a class="back" href="/platform/salons/${salon.id}">← Back to ${salon.name}</a><section class="card"><h1>Delivery reset for ${salon.name}</h1><p>This clears dummy operating data so the salon starts fresh. It keeps setup data: services/menu, staff, products, packages, users, settings, branding, WhatsApp, and the salon workspace.</p>{%FLASHES%}<div class="grid"><div class="box danger"><h2>Will be cleared</h2><dl>${removable.map(k=>`<dt>${k.replaceAll('_',' ')}</dt><dd>${counts[k]}</dd>`).join('')}</dl></div><div class="box safe"><h2>Will be kept</h2><dl>${kept.map(k=>`<dt>${k.replace('_kept','').replaceAll('_',' ')}</dt><dd>${counts[k]}</dd>`).join('')}</dl></div></div><form method="post"><label>Type DELIVER to permanently clear dummy data<input required name="confirm" autocomplete="off" placeholder="DELIVER"></label><button class="btn">Clear dummy data for delivery</button></form></section></main></body></html>`.replace('{%FLASHES%}',(res.locals.flashes||[]).map(([cat,msg])=>`<div class="flash ${cat}">${msg}</div>`).join('')));
+  }));
+  app.post('/platform/salons/:id/delivery-reset',platformAuth,asyncRoute(async(req,res)=>{
+    const id=Number(req.params.id),context=await deliveryResetContext(id);if(!context)return res.status(404).send('Salon not found');
+    if(String(req.body.confirm||'').trim()!=='DELIVER'){req.flash('error','Type DELIVER exactly to confirm the delivery reset.');return res.redirect(`/platform/salons/${id}/delivery-reset`);}
+    await db.transaction(async connection=>{
+      await connection.execute('DELETE FROM whatsapp_webhook_events WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM password_reset_tokens WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM appointments WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM loyalty_transactions WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM referral_credit_transactions WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM sale_items WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM sales WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM expenses WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM customers WHERE salon_id=?',[id]);
+      await connection.execute('DELETE FROM audit_logs WHERE salon_id=?',[id]);
+      await connection.execute('INSERT INTO audit_logs(salon_id,user_id,action,target_type,target_id,details,ip_address) VALUES(?,NULL,?,?,?,?,?)',[id,'platform.delivery_reset','salon',id,`Delivery reset completed for ${context.salon.name}`,req.ip||null]);
+    });
+    req.flash('success',`${context.salon.name} is cleared for delivery. Services/menu, users, staff, products, packages, settings and WhatsApp configuration were kept.`);
+    res.redirect(`/platform/salons/${id}/delivery-reset`);
+  }));
   app.post('/platform/salons/:id/status',platformAuth,asyncRoute(async(req,res)=>{
     const status=req.body.status==='Active'?'Active':'Suspended';
     await db.rows('UPDATE salons SET status=:status WHERE id=:id',{status,id:Number(req.params.id)});req.flash('success',`Salon access ${status==='Active'?'restored':'suspended'}.`);res.redirect('/platform');
