@@ -138,6 +138,24 @@ module.exports = app => {
        GROUP BY c.id ORDER BY c.id DESC`, {salonId:req.user.salon_id,like});
     res.render('customers.html', { rows, q });
   }));
+  app.get('/customers/lookup', auth, asyncRoute(async(req,res)=>{
+    const q=String(req.query.q||'').trim();
+    const digits=normalizeIndianMobile(q);
+    if(q.length<3&&digits.length<3)return res.json({matches:[]});
+    const params={salonId:req.user.salon_id,like:`%${q}%`,digits,digitsLike:`%${digits}%`};
+    const rows=await db.rows(`SELECT id,customer_id,name,mobile,alt_mobile,email,gender,dob,anniversary,source,tags,care_notes,notes,internal_notes
+      FROM customers
+      WHERE salon_id=:salonId AND archived=0 AND (
+        name LIKE :like OR email LIKE :like OR customer_id LIKE :like
+        OR (:digits<>'' AND (mobile LIKE :digitsLike OR alt_mobile LIKE :digitsLike))
+      )
+      ORDER BY CASE
+        WHEN :digits<>'' AND (mobile=:digits OR alt_mobile=:digits) THEN 0
+        WHEN :digits<>'' AND (mobile LIKE :digitsLike OR alt_mobile LIKE :digitsLike) THEN 1
+        ELSE 2 END, id DESC
+      LIMIT 8`,params);
+    res.json({matches:rows});
+  }));
 
   const customerForm = async (req, res) => {
     const cid = req.params.cid ? Number(req.params.cid) : null;
@@ -168,12 +186,12 @@ module.exports = app => {
           AND (mobile=:mobile OR alt_mobile=:mobile OR (:altMobile IS NOT NULL AND (mobile=:altMobile OR alt_mobile=:altMobile)))
         LIMIT 1`,{salonId,cid,mobile:values.mobile,altMobile:values.alt_mobile});
       if (duplicateNumber) {
-        req.flash('error', `That contact number already belongs to ${duplicateNumber.name}.`);
+        req.flash('error', `That contact number already belongs to ${duplicateNumber.name}. Open existing customer #${duplicateNumber.id} instead of creating a duplicate.`);
         return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');
       }
       if (values.email) {
         const duplicateEmail=await db.one(`SELECT id,name FROM customers WHERE salon_id=:salonId AND id<>COALESCE(:cid,0) AND LOWER(email)=LOWER(:email) LIMIT 1`,{salonId,cid,email:values.email});
-        if(duplicateEmail){req.flash('error',`That email address already belongs to ${duplicateEmail.name}.`);return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');}
+        if(duplicateEmail){req.flash('error',`That email address already belongs to ${duplicateEmail.name}. Open existing customer #${duplicateEmail.id} instead of creating a duplicate.`);return res.redirect(cid ? `/customers/${cid}/edit` : '/customers/new');}
       }
       for (const dateField of ['dob', 'anniversary']) if (!values[dateField]) values[dateField] = null;
       const referredById = req.body.referred_by_id || null;
