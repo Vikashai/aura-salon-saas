@@ -17,7 +17,7 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
 });
 
-const TENANT_TABLES=['customers','sales','sale_items','capacity_pools','services','staff','service_staff','products','packages','expenses','users','audit_logs','settings','appointments','loyalty_transactions','referral_credit_transactions','password_reset_tokens','whatsapp_webhook_events'];
+const TENANT_TABLES=['customers','sales','sale_items','capacity_pools','services','staff','service_staff','staff_attendance','products','packages','expenses','users','audit_logs','settings','appointments','loyalty_transactions','referral_credit_transactions','password_reset_tokens','whatsapp_webhook_events'];
 const tenantTablePattern=new RegExp(`\\b(?:${TENANT_TABLES.join('|')})\\b`,'i');
 function assertTenantScoped(sql) {
   const text=String(sql||'');

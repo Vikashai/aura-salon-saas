@@ -9,11 +9,12 @@ const crypto = require('node:crypto');
 const { asyncRoute, isoDate, firstName } = require('../helpers');
 const { sendWhatsApp, sendEmail } = require('../notifications');
 const { auth, loyaltyConfig, awardPoints } = require('./shared');
+const { summariesForPeriod } = require('../attendance-service');
 const upload = multer({ storage:multer.memoryStorage(), limits:{ fileSize:5*1024*1024 } });
 
 const MODULES = {
   services: ['services','Services','Service',['name','category','price','duration','commission','capacity_pool_id','status'],['Service name','Category','Price','Duration (min)','Commission %','Capacity pool','Status']],
-  staff: ['staff','Team','Team member',['name','mobile','role','joining_date','fixed_salary','status'],['Full name','Mobile','Role','Joining date','Fixed salary','Status']],
+  staff: ['staff','Team','Team member',['name','mobile','role','joining_date','fixed_salary','weekly_off_day','status'],['Full name','Mobile','Role','Joining date','Fixed salary','Weekly off','Status']],
   inventory: ['products','Inventory','Product',['name','category','brand','sku','selling_price','stock','low_stock','unit','status'],['Product name','Category','Brand','SKU','Selling price','Stock','Low stock level','Unit','Status']],
   packages: ['packages','Packages & memberships','Plan',['name','kind','price','validity','sessions','status'],['Plan name','Type','Price','Validity (days)','Sessions','Status']],
   expenses: ['expenses','Expenses','Expense',['expense_date','category','subcategory','employee_name','amount','payment_mode','paid_to','reference_no','period_start','period_end','due_date','notes'],['Date','Category','Type / purpose','Employee','Amount','Payment mode','Paid to','Reference','Period from','Period to','Due date','Notes']],
@@ -28,6 +29,16 @@ const SETTINGS_KEYS = ['salon_name','invoice_prefix','gst_number','tax_enabled',
   'loyalty_referral_referee','referral_referrer_credit','referral_referee_discount','loyalty_earn_on_services','loyalty_earn_on_products','msg_welcome','msg_birthday','msg_anniversary'];
 
 function values(body, key) { const value = body[key]; return Array.isArray(value) ? value : value == null ? [] : [value]; }
+function adjustmentRows(body, staffId) {
+  const types=values(body,`payroll_adjust_type_${staffId}`),amounts=values(body,`payroll_adjust_amount_${staffId}`),reasons=values(body,`payroll_adjust_reason_${staffId}`);
+  return amounts.map((rawAmount,index)=>({type:types[index]==='deduct'?'deduct':'add',amount:Math.round(Number(rawAmount||0)*100)/100,reason:String(reasons[index]||'').trim()})).filter(row=>row.amount>0||row.reason);
+}
+function describePayrollNotes(baseNotes, summary, adjustments) {
+  const lines=[String(baseNotes||'').trim()].filter(Boolean);
+  if(summary)lines.push(`Attendance: ${summary.present} present, ${summary.half_day} half day, ${summary.absent} absent, ${summary.leave} leave, ${summary.weekly_off} weekly off, ${summary.not_marked} not marked.`);
+  for(const item of adjustments)lines.push(`${item.type==='deduct'?'Deduction':'Addition'}: ${item.amount} - ${item.reason}`);
+  return lines.join('\n');
+}
 function csvValue(value) { const text = String(value ?? ''); return /[",\n]/.test(text) ? `"${text.replaceAll('"','""')}"` : text; }
 function settingObject(rows) { const data = Object.fromEntries(rows.map(row => [row.key, row.value])); data.get = (key, fallback='') => data[key] ?? fallback; return data; }
 function serviceCategory(gender, category) {
@@ -91,8 +102,16 @@ module.exports = app => {
       if (category === 'Payroll') {
         const staffIds=values(req.body,'payroll_staff_ids').map(Number).filter(Number.isInteger);
         if(!staffIds.length){req.flash('error','Select at least one employee for payroll.');return res.redirect('/manage/expenses');}
+        const summaries=new Map((await summariesForPeriod(salonId,periodStart||expenseDate,periodEnd||expenseDate,staffIds)).map(row=>[Number(row.id),row]));
         const group=`PAY-${Date.now().toString(36).toUpperCase()}`;let created=0;
-        for(const staffId of staffIds){const person=await db.one('SELECT id,name FROM staff WHERE id=:id AND salon_id=:salonId AND archived=0',{id:staffId,salonId}),amount=Number(req.body[`payroll_amount_${staffId}`]||0);if(!person||amount<=0)continue;await db.rows('INSERT INTO expenses(salon_id,expense_date,category,subcategory,employee_name,expense_group,amount,payment_mode,paid_to,reference_no,period_start,period_end,due_date,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[salonId,expenseDate,'Payroll','Salary',person.name,group,amount,paymentMode,person.name,referenceNo,periodStart,periodEnd,dueDate,notes]);created++;}
+        for(const staffId of staffIds){
+          const person=await db.one('SELECT id,name,fixed_salary FROM staff WHERE id=:id AND salon_id=:salonId AND archived=0',{id:staffId,salonId}),amount=Math.round(Number(req.body[`payroll_amount_${staffId}`]||0)*100)/100;
+          if(!person||amount<=0)continue;
+          const adjustments=adjustmentRows(req.body,staffId),badAdjustment=adjustments.find(item=>item.amount<=0||!item.reason);
+          if(badAdjustment){req.flash('error','Every payroll addition or deduction needs an amount and reason.');return res.redirect('/manage/expenses');}
+          const summary=summaries.get(staffId),baseAmount=Number(req.body[`payroll_base_${staffId}`]||person.fixed_salary||0),attendanceAmount=summary?.suggested_amount||null,payrollNotes=describePayrollNotes(notes,summary,adjustments);
+          await db.rows('INSERT INTO expenses(salon_id,expense_date,category,subcategory,employee_name,expense_group,amount,payment_mode,paid_to,reference_no,period_start,period_end,due_date,notes,payroll_staff_id,payroll_base_amount,payroll_attendance_amount,payroll_adjustments,payroll_attendance_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[salonId,expenseDate,'Payroll','Salary',person.name,group,amount,paymentMode,person.name,referenceNo,periodStart,periodEnd,dueDate,payrollNotes,staffId,baseAmount,attendanceAmount,JSON.stringify(adjustments),JSON.stringify(summary||{})]);created++;
+        }
         if(!created){req.flash('error','Enter a payroll amount for each selected employee.');return res.redirect('/manage/expenses');}
         req.flash('success',`Payroll recorded for ${created} employee${created===1?'':'s'}.`);return res.redirect('/manage/expenses');
       }

@@ -97,8 +97,27 @@ CREATE TABLE IF NOT EXISTS staff (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, salon_id INT UNSIGNED NOT NULL, name VARCHAR(150), mobile VARCHAR(30), email VARCHAR(190),
   gender VARCHAR(30), role VARCHAR(100), joining_date DATE, salary_type VARCHAR(50),
   fixed_salary DECIMAL(12,2), commission DECIMAL(6,2), status VARCHAR(30) DEFAULT 'Active',
-  notes TEXT, archived TINYINT(1) DEFAULT 0,
+  weekly_off_day VARCHAR(20), notes TEXT, archived TINYINT(1) DEFAULT 0,
   CONSTRAINT fk_staff_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS staff_attendance (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  salon_id INT UNSIGNED NOT NULL,
+  staff_id INT UNSIGNED NOT NULL,
+  attendance_date DATE NOT NULL,
+  status ENUM('Present','Absent','Half Day','Leave','Weekly Off') NOT NULL,
+  check_in TIME NULL,
+  check_out TIME NULL,
+  notes TEXT,
+  marked_by INT UNSIGNED NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_attendance_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE,
+  CONSTRAINT fk_attendance_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_staff_attendance_date (salon_id,staff_id,attendance_date),
+  INDEX idx_attendance_date (salon_id,attendance_date),
+  INDEX idx_attendance_staff_period (salon_id,staff_id,attendance_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS service_staff (
@@ -131,6 +150,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   subcategory VARCHAR(120), employee_name VARCHAR(150), expense_group VARCHAR(64),
   amount DECIMAL(12,2), payment_mode VARCHAR(50), paid_to VARCHAR(190), reference_no VARCHAR(120),
   period_start DATE, period_end DATE, due_date DATE, notes TEXT,
+  payroll_staff_id INT UNSIGNED NULL, payroll_base_amount DECIMAL(12,2) NULL,
+  payroll_attendance_amount DECIMAL(12,2) NULL, payroll_adjustments JSON NULL, payroll_attendance_snapshot JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_expense_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

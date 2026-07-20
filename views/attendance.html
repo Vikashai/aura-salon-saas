@@ -1,0 +1,45 @@
+{% extends 'base.html' %}{% block content %}
+<div class="page-head"><div><p class="eyebrow">TEAM OPERATIONS</p><h1>Attendance</h1><p>Mark daily staff time and review payroll-ready monthly totals.</p></div></div>
+
+<form class="report-filter attendance-filter" method="get">
+  <label>Date<input type="date" name="date" value="{{date}}"></label>
+  <label>Summary from<input type="date" name="start" value="{{start}}"></label>
+  <label>Summary to<input type="date" name="end" value="{{end}}"></label>
+  <button class="btn dark">Apply</button>
+</form>
+
+<form method="post" class="panel attendance-panel">
+  <input type="hidden" name="attendance_date" value="{{date}}">
+  <input type="hidden" name="start" value="{{start}}">
+  <input type="hidden" name="end" value="{{end}}">
+  <div class="panel-head"><div><h3>Daily marking</h3><p>{{date}} · weekly off fills automatically from Team settings.</p></div><div class="attendance-actions"><button class="btn ghost compact" type="button" onclick="setAllAttendance('Present')">Set present</button><button class="btn ghost compact" type="button" onclick="setAllAttendance('Absent')">Set absent</button><button class="btn primary compact">Save attendance</button></div></div>
+  <div class="table-wrap"><table class="attendance-table"><thead><tr><th>Staff</th><th>Weekly off</th><th>Status</th><th>Check in</th><th>Check out</th><th>Notes</th></tr></thead><tbody>
+    {% for row in rows %}
+    <tr>
+      <td><input type="hidden" name="staff_id" value="{{row.id}}"><strong>{{row.name}}</strong><small>{{row.role or 'Team member'}}</small></td>
+      <td>{{row.weekly_off_day or 'Not set'}}</td>
+      <td><select name="status_{{row.id}}" data-attendance-status><option value="">Not Marked</option>{% for status in statuses %}<option {% if row.status==status %}selected{% endif %}>{{status}}</option>{% endfor %}</select>{% if row.auto_weekly_off %}<small class="auto-note">Auto weekly off</small>{% endif %}</td>
+      <td><input type="time" name="check_in_{{row.id}}" value="{{row.check_in}}"></td>
+      <td><input type="time" name="check_out_{{row.id}}" value="{{row.check_out}}"></td>
+      <td><input name="notes_{{row.id}}" value="{{row.notes}}" placeholder="Optional"></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6"><div class="empty">No active staff found. Add staff from Team first.</div></td></tr>
+    {% endfor %}
+  </tbody></table></div>
+</form>
+
+<div class="panel">
+  <div class="panel-head"><div><h3>Payroll summary</h3><p>{{start}} to {{end}} · leave is unpaid in this version.</p></div></div>
+  <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Paid days</th><th>Present</th><th>Half</th><th>Absent</th><th>Leave</th><th>Weekly off</th><th>Not marked</th><th>Hours</th><th class="right">Suggested</th></tr></thead><tbody>
+    {% for row in monthly %}
+    <tr><td><strong>{{row.name}}</strong><small>{{row.weekly_off_day or 'No weekly off set'}}</small></td><td>{{row.paid_days}} / {{row.expected_working_days}}</td><td>{{row.present}}</td><td>{{row.half_day}}</td><td>{{row.absent}}</td><td>{{row.leave}}</td><td>{{row.weekly_off}}</td><td>{% if row.not_marked %}<span class="badge pending">{{row.not_marked}}</span>{% else %}0{% endif %}</td><td>{{row.total_hours}}</td><td class="right"><strong>{{row.suggested_amount|money}}</strong></td></tr>
+    {% else %}
+    <tr><td colspan="10"><div class="empty">No payroll summary available.</div></td></tr>
+    {% endfor %}
+  </tbody></table></div>
+</div>
+
+<style>.attendance-filter{align-items:flex-end}.attendance-panel{margin-bottom:16px}.attendance-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.attendance-table input,.attendance-table select{min-width:120px;width:100%}.attendance-table td:first-child{min-width:190px}.attendance-table td:last-child{min-width:220px}.auto-note{color:#5b7c1b;font-weight:700}.badge.pending{background:#fff0d1;color:#8b5d00}@media(max-width:760px){.attendance-actions{justify-content:flex-start}.attendance-filter{display:grid;grid-template-columns:1fr}}</style>
+<script>function setAllAttendance(status){document.querySelectorAll('[data-attendance-status]').forEach(select=>select.value=status)}</script>
+{% endblock %}

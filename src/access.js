@@ -1,11 +1,11 @@
 'use strict';
 const db = require('./db');
 
-const MODULES = ['dashboard','appointments','customers','billing','services','team','inventory','packages','expenses','reports','loyalty','greetings','settings','users'];
+const MODULES = ['dashboard','appointments','customers','billing','services','team','attendance','inventory','packages','expenses','reports','loyalty','greetings','settings','users'];
 const all = () => MODULES.flatMap(module => [`${module}.view`,`${module}.manage`]);
 const ROLE_PERMISSIONS = {
   owner: all(),
-  admin: all(),
+  admin: all().filter(permission => !permission.startsWith('attendance.')),
   manager: all().filter(permission => !permission.startsWith('users.') && !permission.startsWith('settings.')),
   receptionist: ['dashboard.view','appointments.view','appointments.manage','customers.view','customers.manage','billing.view','billing.manage','services.view','team.view','inventory.view','packages.view'],
   team: ['dashboard.view','appointments.view','customers.view','services.view','team.view'],
@@ -26,6 +26,7 @@ function routePermission(req) {
   if(path.startsWith('/appointments')||path.startsWith('/api/slots'))return`appointments.${manage?'manage':'view'}`;
   if(path.startsWith('/customers'))return`customers.${manage?'manage':'view'}`;
   if(path.startsWith('/billing')||path.startsWith('/api/loyalty')||path.startsWith('/api/referral'))return`billing.${manage?'manage':'view'}`;
+  if(path.startsWith('/attendance')||path.startsWith('/api/payroll/attendance'))return`attendance.${manage?'manage':'view'}`;
   const management={services:'services',staff:'team',inventory:'inventory',packages:'packages',expenses:'expenses'};
   const match=path.match(/^\/manage\/([^/]+)/);if(match&&management[match[1]])return`${management[match[1]]}.${manage?'manage':'view'}`;
   if(path.startsWith('/reports'))return'reports.view';

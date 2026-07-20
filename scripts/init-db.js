@@ -41,7 +41,7 @@ async function main() {
   const salonId = defaultSalon.id;
   const salonColumns=[['payment_status',"ENUM('Pending','Paid','Overdue','Waived') NOT NULL DEFAULT 'Pending' AFTER custom_domain"],['payment_notes','VARCHAR(500) NULL AFTER payment_status'],['access_starts_at','DATETIME NULL AFTER payment_notes'],['access_ends_at','DATETIME NULL AFTER access_starts_at']];
   for(const [column,definition] of salonColumns){const [found]=await connection.query(`SHOW COLUMNS FROM salons LIKE '${column}'`);if(!found.length)await connection.query(`ALTER TABLE salons ADD COLUMN ${column} ${definition}`);}
-  const tenantTables = ['customers','sales','sale_items','capacity_pools','services','staff','service_staff','products','packages','expenses','users','audit_logs','settings','appointments','loyalty_transactions','referral_credit_transactions','whatsapp_webhook_events'];
+  const tenantTables = ['customers','sales','sale_items','capacity_pools','services','staff','service_staff','staff_attendance','products','packages','expenses','users','audit_logs','settings','appointments','loyalty_transactions','referral_credit_transactions','whatsapp_webhook_events'];
   for (const table of tenantTables) {
     const [columns] = await connection.query(`SHOW COLUMNS FROM \`${table}\` LIKE 'salon_id'`);
     if (!columns.length) await connection.query(`ALTER TABLE \`${table}\` ADD COLUMN salon_id INT UNSIGNED NULL ${['service_staff','settings'].includes(table)?'FIRST':'AFTER id'}`);
@@ -63,11 +63,35 @@ async function main() {
     ['subcategory','VARCHAR(120) NULL AFTER category'], ['employee_name','VARCHAR(150) NULL AFTER subcategory'],
     ['expense_group','VARCHAR(64) NULL AFTER employee_name'], ['reference_no','VARCHAR(120) NULL AFTER paid_to'],
     ['period_start','DATE NULL AFTER reference_no'], ['period_end','DATE NULL AFTER period_start'], ['due_date','DATE NULL AFTER period_end'],
+    ['payroll_staff_id','INT UNSIGNED NULL AFTER notes'], ['payroll_base_amount','DECIMAL(12,2) NULL AFTER payroll_staff_id'],
+    ['payroll_attendance_amount','DECIMAL(12,2) NULL AFTER payroll_base_amount'],
+    ['payroll_adjustments','JSON NULL AFTER payroll_attendance_amount'],
+    ['payroll_attendance_snapshot','JSON NULL AFTER payroll_adjustments'],
   ];
   for (const [column, definition] of expenseColumns) {
     const [found] = await connection.query(`SHOW COLUMNS FROM expenses LIKE '${column}'`);
     if (!found.length) await connection.query(`ALTER TABLE expenses ADD COLUMN ${column} ${definition}`);
   }
+  const [weeklyOffColumn] = await connection.query("SHOW COLUMNS FROM staff LIKE 'weekly_off_day'");
+  if (!weeklyOffColumn.length) await connection.query('ALTER TABLE staff ADD COLUMN weekly_off_day VARCHAR(20) NULL AFTER commission');
+  await connection.query(`CREATE TABLE IF NOT EXISTS staff_attendance (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    salon_id INT UNSIGNED NOT NULL,
+    staff_id INT UNSIGNED NOT NULL,
+    attendance_date DATE NOT NULL,
+    status ENUM('Present','Absent','Half Day','Leave','Weekly Off') NOT NULL,
+    check_in TIME NULL,
+    check_out TIME NULL,
+    notes TEXT,
+    marked_by INT UNSIGNED NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_attendance_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE,
+    CONSTRAINT fk_attendance_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_staff_attendance_date (salon_id,staff_id,attendance_date),
+    INDEX idx_attendance_date (salon_id,attendance_date),
+    INDEX idx_attendance_staff_period (salon_id,staff_id,attendance_date)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
   const referralColumns = [
     ['customers','referral_credit','DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER referral_code'],
     ['sales','referrer_id','INT UNSIGNED NULL AFTER loyalty_discount'],
