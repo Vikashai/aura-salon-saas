@@ -28,12 +28,14 @@
   <section class="commission-editor">
     <div class="summary-row commission-summary">
       <div class="summary-mini"><small>Sales in period</small><strong>{{selected.commission_sales|money}}</strong></div>
-      <div class="summary-mini lime"><small>Commission</small><strong>{{selected.commission_amount|money}}</strong></div>
-      <div class="summary-mini"><small>Slabs</small><strong>{{selected.rules|length}}</strong></div>
+      <div class="summary-mini lime"><small>Commission preview</small><strong id="commission-total">{{selected.commission_amount|money}}</strong></div>
+      <div class="summary-mini"><small>Slabs</small><strong id="commission-slab-count">{{selected.rules|length}}</strong></div>
     </div>
 
-    <form class="panel" method="post" action="/commission/{{selected.id}}">
-      <div class="panel-head"><div><h3>{{selected.name}}</h3><p>{{selected.role or 'Team member'}} · {{start}} to {{end}}</p></div><button class="btn primary compact">Save rules</button></div>
+    <form class="panel commission-form" method="post" action="/commission/{{selected.id}}" data-sales="{{selected.commission_sales or 0}}">
+      <input type="hidden" name="start" value="{{start}}">
+      <input type="hidden" name="end" value="{{end}}">
+      <div class="panel-head"><div><h3>{{selected.name}}</h3><p>{{selected.role or 'Team member'}} &middot; {{start}} to {{end}}</p></div><button class="btn primary compact">Save rules</button></div>
       <div class="commission-head"><span>From sales amount</span><span>Commission %</span><span></span></div>
       <div class="commission-rules">
         {% for rule in selected.rules %}
@@ -43,16 +45,16 @@
         {% endfor %}
       </div>
       <button class="btn ghost compact" type="button" onclick="addCommissionRow(this)">Add slab</button>
-      <small class="commission-help">Example: 0 at 5%, 25000 at 10%, 45000 at 15%. Only the amount above each threshold uses the next rate.</small>
+      <small class="commission-help">Example: 0 at 5%, 25000 at 10%, 45000 at 15%. The preview uses current invoice sales in this period; click Save rules to store it.</small>
     </form>
 
     <div class="panel">
-      <div class="panel-head"><div><h3>Current calculation</h3><p>Based on invoices in the selected period.</p></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Slab</th><th class="right">Sales applied</th><th class="right">Rate</th><th class="right">Commission</th></tr></thead><tbody>
+      <div class="panel-head"><div><h3>Current calculation</h3><p>Based on invoices in the selected period and the rules shown above.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Slab</th><th class="right">Sales applied</th><th class="right">Rate</th><th class="right">Commission</th></tr></thead><tbody id="commission-preview-body">
         {% for slab in selected.commission_slabs %}
         <tr><td>{{slab.from|money}}{% if slab.to %} to {{slab.to|money}}{% else %}+{% endif %}</td><td class="right">{{slab.applied|money}}</td><td class="right">{{slab.rate_percent}}%</td><td class="right"><strong>{{slab.commission|money}}</strong></td></tr>
         {% else %}
-        <tr><td colspan="4"><div class="empty">No commission for this period yet.</div></td></tr>
+        <tr><td colspan="4"><div class="empty">Enter a commission percent above to preview from current sales.</div></td></tr>
         {% endfor %}
       </tbody></table></div>
     </div>
@@ -64,5 +66,34 @@
 
 <template id="commission-row-template"><div class="commission-row"><input type="number" min="0" step="0.01" name="threshold_amount" placeholder="From amount"><input type="number" min="0" step="0.01" name="rate_percent" placeholder="Percent"><button type="button" aria-label="Remove" onclick="removeCommissionRow(this)">x</button></div></template>
 <style>.commission-filter{align-items:flex-end}.commission-layout{display:grid;grid-template-columns:330px minmax(0,1fr);gap:16px}.commission-list{padding-bottom:0}.commission-search{width:100%;margin-bottom:12px}.commission-staff-list{max-height:640px;overflow:auto;margin:0 -21px}.commission-person{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 21px;border-top:1px solid var(--line)}.commission-person:hover,.commission-person.active{background:#f5f6f1}.commission-person.active strong{color:#20211f}.commission-person span:first-child{display:flex;flex-direction:column;min-width:0}.commission-person small{color:var(--muted);margin-top:3px}.commission-amount{font-weight:800;white-space:nowrap}.commission-editor{display:flex;flex-direction:column;gap:16px}.commission-summary{grid-template-columns:repeat(3,1fr);margin-bottom:0}.commission-head,.commission-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 32px;gap:8px;align-items:center}.commission-head{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;margin-bottom:8px}.commission-row{margin-bottom:8px}.commission-row input{width:100%;min-width:0}.commission-row button{border:0;background:#f2f3ef;border-radius:8px;height:38px}.commission-help{display:block;color:var(--muted);margin-top:10px;line-height:1.45}@media(max-width:980px){.commission-layout{grid-template-columns:1fr}.commission-staff-list{max-height:330px}.commission-summary{grid-template-columns:1fr}}</style>
-<script>function addCommissionRow(button){const row=document.getElementById('commission-row-template').content.cloneNode(true);button.closest('form').querySelector('.commission-rules').append(row)}function removeCommissionRow(button){const list=button.closest('.commission-rules');if(list.children.length>1)button.closest('.commission-row').remove();else button.closest('.commission-row').querySelectorAll('input').forEach(input=>input.value=input.name==='threshold_amount'?'0':'0')}function filterCommissionStaff(){const q=document.getElementById('commission-search').value.trim().toLowerCase();document.querySelectorAll('.commission-person').forEach(row=>row.hidden=Boolean(q&&!row.dataset.search.includes(q)))}</script>
+<script>
+const commissionFormatter=new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0});
+function money(value){return commissionFormatter.format(Number(value||0))}
+function readCommissionRules(form){
+  return Array.from(form.querySelectorAll('.commission-row')).map(row=>({
+    threshold:Number(row.querySelector('[name="threshold_amount"]').value||0),
+    rate:Number(row.querySelector('[name="rate_percent"]').value||0)
+  })).filter(rule=>Number.isFinite(rule.threshold)&&Number.isFinite(rule.rate)&&rule.threshold>=0).sort((a,b)=>a.threshold-b.threshold);
+}
+function calculateCommission(sales,rules){
+  if(!rules.length)return[];
+  return rules.map((rule,index)=>{
+    const next=rules[index+1],upper=next?next.threshold:sales,applied=Math.max(0,Math.min(sales,upper)-rule.threshold);
+    return {from:rule.threshold,to:next?.threshold??null,applied,rate:rule.rate,commission:applied*rule.rate/100};
+  }).filter(slab=>slab.applied>0||slab.rate>0);
+}
+function refreshCommissionPreview(){
+  const form=document.querySelector('.commission-form'),body=document.getElementById('commission-preview-body');
+  if(!form||!body)return;
+  const sales=Number(form.dataset.sales||0),rules=readCommissionRules(form),slabs=calculateCommission(sales,rules),total=slabs.reduce((sum,slab)=>sum+slab.commission,0);
+  document.getElementById('commission-total').textContent=money(total);
+  document.getElementById('commission-slab-count').textContent=String(rules.filter(rule=>rule.rate>0||rule.threshold>0).length);
+  body.innerHTML=slabs.length?slabs.map(slab=>`<tr><td>${money(slab.from)}${slab.to!==null?` to ${money(slab.to)}`:'+'}</td><td class="right">${money(slab.applied)}</td><td class="right">${slab.rate}%</td><td class="right"><strong>${money(slab.commission)}</strong></td></tr>`).join(''):'<tr><td colspan="4"><div class="empty">Enter a commission percent above to preview from current sales.</div></td></tr>';
+}
+function addCommissionRow(button){const row=document.getElementById('commission-row-template').content.cloneNode(true);button.closest('form').querySelector('.commission-rules').append(row);refreshCommissionPreview()}
+function removeCommissionRow(button){const list=button.closest('.commission-rules');if(list.children.length>1)button.closest('.commission-row').remove();else button.closest('.commission-row').querySelectorAll('input').forEach(input=>input.value='0');refreshCommissionPreview()}
+function filterCommissionStaff(){const q=document.getElementById('commission-search').value.trim().toLowerCase();document.querySelectorAll('.commission-person').forEach(row=>row.hidden=Boolean(q&&!row.dataset.search.includes(q)))}
+document.addEventListener('input',event=>{if(event.target.closest('.commission-form'))refreshCommissionPreview()});
+document.addEventListener('DOMContentLoaded',refreshCommissionPreview);
+</script>
 {% endblock %}

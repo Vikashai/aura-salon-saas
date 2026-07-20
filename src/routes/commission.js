@@ -52,6 +52,9 @@ module.exports = app => {
     });
     await audit(req.user.id,'commission.updated','staff',staffId,`Updated commission rules for ${staffName}`,req);
     req.flash('success',`Commission rules saved for ${staffName}.`);
-    res.redirect('/commission');
+    const params=new URLSearchParams({staff_id:String(staffId)});
+    if(req.body.start)params.set('start',String(req.body.start).slice(0,10));
+    if(req.body.end)params.set('end',String(req.body.end).slice(0,10));
+    res.redirect(`/commission?${params.toString()}`);
   }));
 };
