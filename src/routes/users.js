@@ -5,7 +5,7 @@ const { asyncRoute }=require('../helpers');
 const { auth }=require('./shared');
 const { MODULES,ROLE_PERMISSIONS,normalizeRole,audit }=require('../access');
 
-const LABELS={dashboard:'Dashboard',appointments:'Appointments',customers:'Customers',billing:'Billing & sales',services:'Services',team:'Team',attendance:'Attendance',inventory:'Inventory',packages:'Packages',expenses:'Expenses',reports:'Reports',loyalty:'Loyalty',greetings:'Greetings',settings:'Settings',users:'Users & access'};
+const LABELS={dashboard:'Dashboard',appointments:'Appointments',customers:'Customers',billing:'Billing & sales',services:'Services',team:'Team',attendance:'Attendance',commission:'Commission',inventory:'Inventory',packages:'Packages',expenses:'Expenses',reports:'Reports',loyalty:'Loyalty',greetings:'Greetings',settings:'Settings',users:'Users & access'};
 const ROLES=['owner','admin','manager','receptionist','team','custom'];
 const selectedPermissions=body=>{const raw=Array.isArray(body.permissions)?body.permissions:body.permissions?[body.permissions]:[];const valid=new Set(MODULES.flatMap(module=>[`${module}.view`,`${module}.manage`]));return raw.filter(permission=>valid.has(permission));};
 function roleAllowed(actor,role){return actor.role==='owner'||!['owner','admin'].includes(role);}

@@ -3,6 +3,7 @@ const registerCore = require('./core');
 const registerOperations = require('./operations');
 const registerAppointments = require('./appointments');
 const registerAttendance = require('./attendance');
+const registerCommission = require('./commission');
 const registerUsers = require('./users');
 const registerPlatform = require('./platform');
 const registerWebhooks = require('./webhooks');
@@ -14,5 +15,6 @@ module.exports = app => {
   registerOperations(app);
   registerAppointments(app);
   registerAttendance(app);
+  registerCommission(app);
   registerUsers(app);
 };

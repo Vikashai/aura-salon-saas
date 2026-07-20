@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS sales (
 CREATE TABLE IF NOT EXISTS sale_items (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, salon_id INT UNSIGNED NOT NULL, sale_id INT UNSIGNED NOT NULL,
   item_type VARCHAR(30), item_name VARCHAR(190), quantity DECIMAL(10,2) DEFAULT 1,
-  price DECIMAL(12,2) DEFAULT 0, discount DECIMAL(12,2) DEFAULT 0, staff_name VARCHAR(150),
+  price DECIMAL(12,2) DEFAULT 0, discount DECIMAL(12,2) DEFAULT 0, staff_id INT UNSIGNED NULL, staff_name VARCHAR(150),
   CONSTRAINT fk_item_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE,
   CONSTRAINT fk_item_sale FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -131,6 +131,19 @@ CREATE TABLE IF NOT EXISTS service_staff (
   CONSTRAINT fk_service_staff_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS staff_commission_rules (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  salon_id INT UNSIGNED NOT NULL,
+  staff_id INT UNSIGNED NOT NULL,
+  threshold_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  rate_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_commission_rule_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE,
+  CONSTRAINT fk_commission_rule_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_commission_rule_threshold (salon_id,staff_id,threshold_amount),
+  INDEX idx_commission_rule_staff (salon_id,staff_id,threshold_amount)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS products (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, salon_id INT UNSIGNED NOT NULL, name VARCHAR(190), category VARCHAR(100), brand VARCHAR(100),
   sku VARCHAR(100), purchase_price DECIMAL(12,2), selling_price DECIMAL(12,2), stock DECIMAL(12,2),
@@ -153,6 +166,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   period_start DATE, period_end DATE, due_date DATE, notes TEXT,
   payroll_staff_id INT UNSIGNED NULL, payroll_base_amount DECIMAL(12,2) NULL,
   payroll_attendance_amount DECIMAL(12,2) NULL, payroll_overtime_amount DECIMAL(12,2) NULL,
+  payroll_commission_sales DECIMAL(12,2) NULL, payroll_commission_amount DECIMAL(12,2) NULL,
   payroll_adjustments JSON NULL, payroll_attendance_snapshot JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_expense_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE

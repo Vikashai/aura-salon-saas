@@ -1,0 +1,27 @@
+{% extends 'base.html' %}{% block content %}
+<div class="page-head"><div><p class="eyebrow">PAYROLL RULES</p><h1>Commission</h1><p>Configure progressive sales slabs for each team member.</p></div></div>
+
+<div class="commission-grid">
+{% for person in staff %}
+  <form class="panel commission-card" method="post" action="/commission/{{person.id}}">
+    <div class="panel-head"><div><h3>{{person.name}}</h3><p>{{person.role or 'Team member'}}</p></div><button class="btn primary compact">Save</button></div>
+    <div class="commission-head"><span>From sales amount</span><span>Commission %</span><span></span></div>
+    <div class="commission-rules">
+      {% for rule in person.rules %}
+      <div class="commission-row"><input type="number" min="0" step="0.01" name="threshold_amount" value="{{rule.threshold_amount}}" placeholder="0"><input type="number" min="0" step="0.01" name="rate_percent" value="{{rule.rate_percent}}" placeholder="5"><button type="button" aria-label="Remove" onclick="removeCommissionRow(this)">x</button></div>
+      {% else %}
+      <div class="commission-row"><input type="number" min="0" step="0.01" name="threshold_amount" value="0" placeholder="0"><input type="number" min="0" step="0.01" name="rate_percent" value="0" placeholder="5"><button type="button" aria-label="Remove" onclick="removeCommissionRow(this)">x</button></div>
+      {% endfor %}
+    </div>
+    <button class="btn ghost compact" type="button" onclick="addCommissionRow(this)">Add slab</button>
+    <small class="commission-help">Example: 0 at 5%, 25000 at 10% means only sales above 25000 earn 10%.</small>
+  </form>
+{% else %}
+  <div class="panel"><div class="empty">No active staff found.</div></div>
+{% endfor %}
+</div>
+
+<template id="commission-row-template"><div class="commission-row"><input type="number" min="0" step="0.01" name="threshold_amount" placeholder="From amount"><input type="number" min="0" step="0.01" name="rate_percent" placeholder="Percent"><button type="button" aria-label="Remove" onclick="removeCommissionRow(this)">x</button></div></template>
+<style>.commission-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.commission-card{overflow:hidden}.commission-head,.commission-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 32px;gap:8px;align-items:center}.commission-head{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;margin-bottom:8px}.commission-row{margin-bottom:8px}.commission-row input{width:100%;min-width:0}.commission-row button{border:0;background:#f2f3ef;border-radius:8px;height:38px}.commission-help{display:block;color:var(--muted);margin-top:10px;line-height:1.45}@media(max-width:900px){.commission-grid{grid-template-columns:1fr}}</style>
+<script>function addCommissionRow(button){const row=document.getElementById('commission-row-template').content.cloneNode(true);button.closest('form').querySelector('.commission-rules').append(row)}function removeCommissionRow(button){const list=button.closest('.commission-rules');if(list.children.length>1)button.closest('.commission-row').remove();else button.closest('.commission-row').querySelectorAll('input').forEach(input=>input.value=input.name==='threshold_amount'?'0':'0')}</script>
+{% endblock %}

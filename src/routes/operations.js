@@ -10,6 +10,7 @@ const { asyncRoute, isoDate, firstName } = require('../helpers');
 const { sendWhatsApp, sendEmail } = require('../notifications');
 const { auth, loyaltyConfig, awardPoints } = require('./shared');
 const { summariesForPeriod } = require('../attendance-service');
+const { commissionForPeriod } = require('../commission-service');
 const upload = multer({ storage:multer.memoryStorage(), limits:{ fileSize:5*1024*1024 } });
 
 const MODULES = {
@@ -37,6 +38,7 @@ function describePayrollNotes(baseNotes, summary, adjustments) {
   const lines=[String(baseNotes||'').trim()].filter(Boolean);
   if(summary)lines.push(`Attendance: ${summary.present} present, ${summary.half_day} half day, ${summary.absent} absent, ${summary.leave} leave, ${summary.weekly_off} weekly off, ${summary.not_marked} not marked.`);
   if(summary?.overtime_hours)lines.push(`Overtime: ${summary.overtime_hours} hour(s), amount ${summary.overtime_amount}.`);
+  if(summary?.commission_sales)lines.push(`Commission: sales ${summary.commission_sales}, amount ${summary.commission_amount}.`);
   for(const item of adjustments)lines.push(`${item.type==='deduct'?'Deduction':'Addition'}: ${item.amount} - ${item.reason}`);
   return lines.join('\n');
 }
@@ -103,15 +105,20 @@ module.exports = app => {
       if (category === 'Payroll') {
         const staffIds=values(req.body,'payroll_staff_ids').map(Number).filter(Number.isInteger);
         if(!staffIds.length){req.flash('error','Select at least one employee for payroll.');return res.redirect('/manage/expenses');}
-        const summaries=new Map((await summariesForPeriod(salonId,periodStart||expenseDate,periodEnd||expenseDate,staffIds)).map(row=>[Number(row.id),row]));
+        const [attendanceSummaries,commissionSummaries]=await Promise.all([
+          summariesForPeriod(salonId,periodStart||expenseDate,periodEnd||expenseDate,staffIds),
+          commissionForPeriod(salonId,periodStart||expenseDate,periodEnd||expenseDate,staffIds),
+        ]);
+        const commissions=new Map(commissionSummaries.map(row=>[Number(row.id),row]));
+        const summaries=new Map(attendanceSummaries.map(row=>[Number(row.id),{...row,...(commissions.get(Number(row.id))||{})}]));
         const group=`PAY-${Date.now().toString(36).toUpperCase()}`;let created=0;
         for(const staffId of staffIds){
           const person=await db.one('SELECT id,name,fixed_salary FROM staff WHERE id=:id AND salon_id=:salonId AND archived=0',{id:staffId,salonId}),amount=Math.round(Number(req.body[`payroll_amount_${staffId}`]||0)*100)/100;
           if(!person||amount<=0)continue;
           const adjustments=adjustmentRows(req.body,staffId),badAdjustment=adjustments.find(item=>item.amount<=0||!item.reason);
           if(badAdjustment){req.flash('error','Every payroll addition or deduction needs an amount and reason.');return res.redirect('/manage/expenses');}
-          const summary=summaries.get(staffId),baseAmount=Number(req.body[`payroll_base_${staffId}`]||person.fixed_salary||0),attendanceAmount=summary?.suggested_amount||null,overtimeAmount=summary?.overtime_amount||0,payrollNotes=describePayrollNotes(notes,summary,adjustments);
-          await db.rows('INSERT INTO expenses(salon_id,expense_date,category,subcategory,employee_name,expense_group,amount,payment_mode,paid_to,reference_no,period_start,period_end,due_date,notes,payroll_staff_id,payroll_base_amount,payroll_attendance_amount,payroll_overtime_amount,payroll_adjustments,payroll_attendance_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[salonId,expenseDate,'Payroll','Salary',person.name,group,amount,paymentMode,person.name,referenceNo,periodStart,periodEnd,dueDate,payrollNotes,staffId,baseAmount,attendanceAmount,overtimeAmount,JSON.stringify(adjustments),JSON.stringify(summary||{})]);created++;
+          const summary=summaries.get(staffId),baseAmount=Number(req.body[`payroll_base_${staffId}`]||person.fixed_salary||0),attendanceAmount=summary?.suggested_amount||null,overtimeAmount=summary?.overtime_amount||0,commissionSales=summary?.commission_sales||0,commissionAmount=summary?.commission_amount||0,payrollNotes=describePayrollNotes(notes,summary,adjustments);
+          await db.rows('INSERT INTO expenses(salon_id,expense_date,category,subcategory,employee_name,expense_group,amount,payment_mode,paid_to,reference_no,period_start,period_end,due_date,notes,payroll_staff_id,payroll_base_amount,payroll_attendance_amount,payroll_overtime_amount,payroll_commission_sales,payroll_commission_amount,payroll_adjustments,payroll_attendance_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[salonId,expenseDate,'Payroll','Salary',person.name,group,amount,paymentMode,person.name,referenceNo,periodStart,periodEnd,dueDate,payrollNotes,staffId,baseAmount,attendanceAmount,overtimeAmount,commissionSales,commissionAmount,JSON.stringify(adjustments),JSON.stringify(summary||{})]);created++;
         }
         if(!created){req.flash('error','Enter a payroll amount for each selected employee.');return res.redirect('/manage/expenses');}
         req.flash('success',`Payroll recorded for ${created} employee${created===1?'':'s'}.`);return res.redirect('/manage/expenses');

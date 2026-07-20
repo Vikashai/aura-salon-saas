@@ -5,6 +5,7 @@ const { asyncRoute, isoDate } = require('../helpers');
 const { auth } = require('./shared');
 const { audit } = require('../access');
 const { WEEKDAYS, STATUSES, monthBounds, isWeeklyOff, summariesForPeriod } = require('../attendance-service');
+const { commissionForPeriod } = require('../commission-service');
 
 function attendanceAuth(req, res, next) {
   if (!['owner','manager'].includes(req.user?.role)) return res.status(403).render('access_denied.html', { permission:'attendance.manage' });
@@ -81,7 +82,12 @@ module.exports = app => {
 
   app.get('/api/payroll/attendance', auth, attendanceAuth, asyncRoute(async(req,res) => {
     const { start, end } = monthRange(req.query);
-    const summaries = await summariesForPeriod(req.user.salon_id, start, end);
+    const [attendance, commission] = await Promise.all([
+      summariesForPeriod(req.user.salon_id, start, end),
+      commissionForPeriod(req.user.salon_id, start, end),
+    ]);
+    const commissionByStaff = new Map(commission.map(row => [Number(row.id), row]));
+    const summaries = attendance.map(row => ({ ...row, ...(commissionByStaff.get(Number(row.id)) || {}) }));
     res.json({ start, end, summaries });
   }));
 };

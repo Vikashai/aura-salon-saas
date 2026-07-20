@@ -275,7 +275,7 @@ module.exports = app => {
     const customerData=customerId?await db.one('SELECT referral_credit,referred_by_id FROM customers WHERE id=:customerId AND salon_id=:salonId',{customerId,salonId}):null;
     if(customerId&&!customerData)return res.status(400).send('Invalid customer');
     const priorBillCount=customerId?Number((await db.one('SELECT COUNT(*) count FROM sales WHERE salon_id=:salonId AND customer_id=:customerId AND cancelled=0',{customerId,salonId})).count):0;
-    const itemIds = formArray(req.body,'item_id'), names = formArray(req.body,'item_name'), types = formArray(req.body,'item_type'), quantities = formArray(req.body,'quantity'), staffNames = formArray(req.body,'staff_name');
+    const itemIds = formArray(req.body,'item_id'), names = formArray(req.body,'item_name'), types = formArray(req.body,'item_type'), quantities = formArray(req.body,'quantity'), staffNames = formArray(req.body,'staff_name'), staffIds = formArray(req.body,'staff_id');
     const catalog = { Service:['services','price'], Product:['products','selling_price'], Package:['packages','price'], Membership:['packages','price'] };
     const normalizedLines = [];
     for (let index = 0; index < names.length; index++) {
@@ -287,7 +287,8 @@ module.exports = app => {
       if (!item) continue;
       const quantity=Number(quantities[index] ?? 1),price=Number(item.price||0);
       if(!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(price)||price<0)continue;
-      normalizedLines.push({ type, name:item.name, quantity, price, staff:staffNames[index] || null });
+      const staffId=Number(staffIds[index]||0),staff=staffId?await db.one('SELECT id,name FROM staff WHERE id=:staffId AND salon_id=:salonId AND archived=0 AND status=\'Active\'',{staffId,salonId}):null;
+      normalizedLines.push({ type, name:item.name, quantity, price, staff_id:staff?.id||null, staff:staff?.name||staffNames[index]||null });
     }
     if (!normalizedLines.length) { req.flash('error', 'Select at least one valid service, product or package.'); return res.redirect('/billing/new'); }
     const subtotal = money(normalizedLines.reduce((sum,line)=>sum+line.quantity*line.price,0)), requestedDiscount = Number(req.body.discount || 0);
@@ -324,8 +325,8 @@ module.exports = app => {
         [salonId,invoiceNo,customerId,req.body.invoice_date,subtotal,discount,discountNote||null,gst,gstPercent,tax,finalAmount,paid,
           pending, paymentMode, paymentStatus, req.body.notes || null, req.body.internal_notes || null, pointsUsed, loyaltyDiscount,referrerId||null,referralDiscount,referralCreditUsed]);
       for (const line of normalizedLines) {
-        await connection.execute('INSERT INTO sale_items(salon_id,sale_id,item_type,item_name,quantity,price,discount,staff_name) VALUES(?,?,?,?,?,?,?,?)',
-          [salonId,sale.insertId,line.type,line.name,line.quantity,line.price,0,line.staff]);
+        await connection.execute('INSERT INTO sale_items(salon_id,sale_id,item_type,item_name,quantity,price,discount,staff_id,staff_name) VALUES(?,?,?,?,?,?,?,?,?)',
+          [salonId,sale.insertId,line.type,line.name,line.quantity,line.price,0,line.staff_id,line.staff]);
       }
       if (customerId && cfg.enabled) {
         if(pointsUsed)await awardPoints(connection,salonId,customerId,-pointsUsed,'redeem',`Redeemed on ${invoiceNo} (₹${loyaltyDiscount.toFixed(0)} off)`,'sale',sale.insertId);
