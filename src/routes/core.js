@@ -290,7 +290,7 @@ module.exports = app => {
       const staffId=Number(staffIds[index]||0),staff=staffId?await db.one('SELECT id,name FROM staff WHERE id=:staffId AND salon_id=:salonId AND archived=0 AND status=\'Active\'',{staffId,salonId}):null;
       normalizedLines.push({ type, name:item.name, quantity, price, staff_id:staff?.id||null, staff:staff?.name||staffNames[index]||null });
     }
-    if (!normalizedLines.length) { req.flash('error', 'Select at least one valid service, product or package.'); return res.redirect('/billing/new'); }
+    if (!normalizedLines.length) { req.flash('error', 'Select at least one valid service, product, package or combo service.'); return res.redirect('/billing/new'); }
     const subtotal = money(normalizedLines.reduce((sum,line)=>sum+line.quantity*line.price,0)), requestedDiscount = Number(req.body.discount || 0);
     const discountNote = String(req.body.discount_note || '').trim();
     if (requestedDiscount > 0 && !discountNote) { req.flash('error', 'Enter a reason for the discount.'); return res.redirect('/billing/new'); }
