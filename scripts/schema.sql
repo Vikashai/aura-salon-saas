@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE TABLE IF NOT EXISTS staff (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, salon_id INT UNSIGNED NOT NULL, name VARCHAR(150), mobile VARCHAR(30), email VARCHAR(190),
   gender VARCHAR(30), role VARCHAR(100), joining_date DATE, salary_type VARCHAR(50),
-  fixed_salary DECIMAL(12,2), commission DECIMAL(6,2), status VARCHAR(30) DEFAULT 'Active',
+  fixed_salary DECIMAL(12,2), commission DECIMAL(6,2), standard_daily_hours DECIMAL(5,2) DEFAULT 8,
+  overtime_hourly_rate DECIMAL(12,2) DEFAULT 0, status VARCHAR(30) DEFAULT 'Active',
   weekly_off_day VARCHAR(20), notes TEXT, archived TINYINT(1) DEFAULT 0,
   CONSTRAINT fk_staff_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -151,7 +152,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   amount DECIMAL(12,2), payment_mode VARCHAR(50), paid_to VARCHAR(190), reference_no VARCHAR(120),
   period_start DATE, period_end DATE, due_date DATE, notes TEXT,
   payroll_staff_id INT UNSIGNED NULL, payroll_base_amount DECIMAL(12,2) NULL,
-  payroll_attendance_amount DECIMAL(12,2) NULL, payroll_adjustments JSON NULL, payroll_attendance_snapshot JSON NULL,
+  payroll_attendance_amount DECIMAL(12,2) NULL, payroll_overtime_amount DECIMAL(12,2) NULL,
+  payroll_adjustments JSON NULL, payroll_attendance_snapshot JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_expense_salon FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

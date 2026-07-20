@@ -31,11 +31,11 @@
 
 <div class="panel">
   <div class="panel-head"><div><h3>Payroll summary</h3><p>{{start}} to {{end}} · leave is unpaid in this version.</p></div></div>
-  <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Paid days</th><th>Present</th><th>Half</th><th>Absent</th><th>Leave</th><th>Weekly off</th><th>Not marked</th><th>Hours</th><th class="right">Suggested</th></tr></thead><tbody>
+  <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Paid days</th><th>Present</th><th>Half</th><th>Absent</th><th>Leave</th><th>Weekly off</th><th>Not marked</th><th>Hours</th><th>OT hours</th><th class="right">OT amount</th><th class="right">Suggested</th></tr></thead><tbody>
     {% for row in monthly %}
-    <tr><td><strong>{{row.name}}</strong><small>{{row.weekly_off_day or 'No weekly off set'}}</small></td><td>{{row.paid_days}} / {{row.expected_working_days}}</td><td>{{row.present}}</td><td>{{row.half_day}}</td><td>{{row.absent}}</td><td>{{row.leave}}</td><td>{{row.weekly_off}}</td><td>{% if row.not_marked %}<span class="badge pending">{{row.not_marked}}</span>{% else %}0{% endif %}</td><td>{{row.total_hours}}</td><td class="right"><strong>{{row.suggested_amount|money}}</strong></td></tr>
+    <tr><td><strong>{{row.name}}</strong><small>{{row.weekly_off_day or 'No weekly off set'}} · {{row.standard_daily_hours or 8}}h standard</small></td><td>{{row.paid_days}} / {{row.expected_working_days}}</td><td>{{row.present}}</td><td>{{row.half_day}}</td><td>{{row.absent}}</td><td>{{row.leave}}</td><td>{{row.weekly_off}}</td><td>{% if row.not_marked %}<span class="badge pending">{{row.not_marked}}</span>{% else %}0{% endif %}</td><td>{{row.total_hours}}</td><td>{{row.overtime_hours}}</td><td class="right">{{row.overtime_amount|money}}</td><td class="right"><strong>{{(row.suggested_amount + row.overtime_amount)|money}}</strong><small>salary + OT</small></td></tr>
     {% else %}
-    <tr><td colspan="10"><div class="empty">No payroll summary available.</div></td></tr>
+    <tr><td colspan="12"><div class="empty">No payroll summary available.</div></td></tr>
     {% endfor %}
   </tbody></table></div>
 </div>

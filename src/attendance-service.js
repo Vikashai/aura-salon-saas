@@ -52,7 +52,7 @@ function isWeeklyOff(staff, date) {
 }
 
 function blankCounts() {
-  return { present:0, absent:0, half_day:0, leave:0, weekly_off:0, not_marked:0, paid_days:0, expected_working_days:0, total_minutes:0 };
+  return { present:0, absent:0, half_day:0, leave:0, weekly_off:0, not_marked:0, paid_days:0, expected_working_days:0, total_minutes:0, overtime_minutes:0 };
 }
 
 function applyStatus(summary, staff, date, attendance) {
@@ -64,7 +64,11 @@ function applyStatus(summary, staff, date, attendance) {
   else if (status === 'Leave') { summary.leave++; summary.expected_working_days += 1; }
   else if (status === 'Weekly Off') summary.weekly_off++;
   else { summary.not_marked++; summary.expected_working_days += 1; }
-  summary.total_minutes += minutesBetween(attendance?.check_in, attendance?.check_out);
+  const workedMinutes = minutesBetween(attendance?.check_in, attendance?.check_out);
+  summary.total_minutes += workedMinutes;
+  const standardMinutes = Math.max(Number(staff.standard_daily_hours || 8), 0) * 60;
+  if (workedMinutes > 0 && status === 'Weekly Off') summary.overtime_minutes += workedMinutes;
+  else if (workedMinutes > standardMinutes && ['Present','Half Day'].includes(status)) summary.overtime_minutes += workedMinutes - standardMinutes;
   return status;
 }
 
@@ -75,7 +79,7 @@ function suggestedAmount(staff, summary) {
 }
 
 async function summariesForPeriod(salonId, start, end, ids = []) {
-  const staff = await db.rows(`SELECT id,name,role,fixed_salary,weekly_off_day FROM staff
+  const staff = await db.rows(`SELECT id,name,role,fixed_salary,weekly_off_day,standard_daily_hours,overtime_hourly_rate FROM staff
     WHERE salon_id=:salonId AND archived=0 AND status='Active'
     ORDER BY name`, { salonId });
   const allowed = new Set(ids.map(Number).filter(Number.isInteger));
@@ -91,6 +95,8 @@ async function summariesForPeriod(salonId, start, end, ids = []) {
       ...person,
       ...summary,
       total_hours: Math.round(summary.total_minutes / 60 * 100) / 100,
+      overtime_hours: Math.round(summary.overtime_minutes / 60 * 100) / 100,
+      overtime_amount: Math.round((summary.overtime_minutes / 60) * Number(person.overtime_hourly_rate || 0) * 100) / 100,
       suggested_amount: suggestedAmount(person, summary),
       period_start: start,
       period_end: end,

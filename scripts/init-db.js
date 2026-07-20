@@ -65,7 +65,8 @@ async function main() {
     ['period_start','DATE NULL AFTER reference_no'], ['period_end','DATE NULL AFTER period_start'], ['due_date','DATE NULL AFTER period_end'],
     ['payroll_staff_id','INT UNSIGNED NULL AFTER notes'], ['payroll_base_amount','DECIMAL(12,2) NULL AFTER payroll_staff_id'],
     ['payroll_attendance_amount','DECIMAL(12,2) NULL AFTER payroll_base_amount'],
-    ['payroll_adjustments','JSON NULL AFTER payroll_attendance_amount'],
+    ['payroll_overtime_amount','DECIMAL(12,2) NULL AFTER payroll_attendance_amount'],
+    ['payroll_adjustments','JSON NULL AFTER payroll_overtime_amount'],
     ['payroll_attendance_snapshot','JSON NULL AFTER payroll_adjustments'],
   ];
   for (const [column, definition] of expenseColumns) {
@@ -74,6 +75,14 @@ async function main() {
   }
   const [weeklyOffColumn] = await connection.query("SHOW COLUMNS FROM staff LIKE 'weekly_off_day'");
   if (!weeklyOffColumn.length) await connection.query('ALTER TABLE staff ADD COLUMN weekly_off_day VARCHAR(20) NULL AFTER commission');
+  const staffColumns = [
+    ['standard_daily_hours','DECIMAL(5,2) NULL DEFAULT 8 AFTER commission'],
+    ['overtime_hourly_rate','DECIMAL(12,2) NULL DEFAULT 0 AFTER standard_daily_hours'],
+  ];
+  for (const [column, definition] of staffColumns) {
+    const [found] = await connection.query(`SHOW COLUMNS FROM staff LIKE '${column}'`);
+    if (!found.length) await connection.query(`ALTER TABLE staff ADD COLUMN ${column} ${definition}`);
+  }
   await connection.query(`CREATE TABLE IF NOT EXISTS staff_attendance (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     salon_id INT UNSIGNED NOT NULL,

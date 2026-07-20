@@ -14,7 +14,7 @@ const upload = multer({ storage:multer.memoryStorage(), limits:{ fileSize:5*1024
 
 const MODULES = {
   services: ['services','Services','Service',['name','category','price','duration','commission','capacity_pool_id','status'],['Service name','Category','Price','Duration (min)','Commission %','Capacity pool','Status']],
-  staff: ['staff','Team','Team member',['name','mobile','role','joining_date','fixed_salary','weekly_off_day','status'],['Full name','Mobile','Role','Joining date','Fixed salary','Weekly off','Status']],
+  staff: ['staff','Team','Team member',['name','mobile','role','joining_date','fixed_salary','weekly_off_day','standard_daily_hours','overtime_hourly_rate','status'],['Full name','Mobile','Role','Joining date','Fixed salary','Weekly off','Daily hours','OT hourly rate','Status']],
   inventory: ['products','Inventory','Product',['name','category','brand','sku','selling_price','stock','low_stock','unit','status'],['Product name','Category','Brand','SKU','Selling price','Stock','Low stock level','Unit','Status']],
   packages: ['packages','Packages & memberships','Plan',['name','kind','price','validity','sessions','status'],['Plan name','Type','Price','Validity (days)','Sessions','Status']],
   expenses: ['expenses','Expenses','Expense',['expense_date','category','subcategory','employee_name','amount','payment_mode','paid_to','reference_no','period_start','period_end','due_date','notes'],['Date','Category','Type / purpose','Employee','Amount','Payment mode','Paid to','Reference','Period from','Period to','Due date','Notes']],
@@ -36,6 +36,7 @@ function adjustmentRows(body, staffId) {
 function describePayrollNotes(baseNotes, summary, adjustments) {
   const lines=[String(baseNotes||'').trim()].filter(Boolean);
   if(summary)lines.push(`Attendance: ${summary.present} present, ${summary.half_day} half day, ${summary.absent} absent, ${summary.leave} leave, ${summary.weekly_off} weekly off, ${summary.not_marked} not marked.`);
+  if(summary?.overtime_hours)lines.push(`Overtime: ${summary.overtime_hours} hour(s), amount ${summary.overtime_amount}.`);
   for(const item of adjustments)lines.push(`${item.type==='deduct'?'Deduction':'Addition'}: ${item.amount} - ${item.reason}`);
   return lines.join('\n');
 }
@@ -109,8 +110,8 @@ module.exports = app => {
           if(!person||amount<=0)continue;
           const adjustments=adjustmentRows(req.body,staffId),badAdjustment=adjustments.find(item=>item.amount<=0||!item.reason);
           if(badAdjustment){req.flash('error','Every payroll addition or deduction needs an amount and reason.');return res.redirect('/manage/expenses');}
-          const summary=summaries.get(staffId),baseAmount=Number(req.body[`payroll_base_${staffId}`]||person.fixed_salary||0),attendanceAmount=summary?.suggested_amount||null,payrollNotes=describePayrollNotes(notes,summary,adjustments);
-          await db.rows('INSERT INTO expenses(salon_id,expense_date,category,subcategory,employee_name,expense_group,amount,payment_mode,paid_to,reference_no,period_start,period_end,due_date,notes,payroll_staff_id,payroll_base_amount,payroll_attendance_amount,payroll_adjustments,payroll_attendance_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[salonId,expenseDate,'Payroll','Salary',person.name,group,amount,paymentMode,person.name,referenceNo,periodStart,periodEnd,dueDate,payrollNotes,staffId,baseAmount,attendanceAmount,JSON.stringify(adjustments),JSON.stringify(summary||{})]);created++;
+          const summary=summaries.get(staffId),baseAmount=Number(req.body[`payroll_base_${staffId}`]||person.fixed_salary||0),attendanceAmount=summary?.suggested_amount||null,overtimeAmount=summary?.overtime_amount||0,payrollNotes=describePayrollNotes(notes,summary,adjustments);
+          await db.rows('INSERT INTO expenses(salon_id,expense_date,category,subcategory,employee_name,expense_group,amount,payment_mode,paid_to,reference_no,period_start,period_end,due_date,notes,payroll_staff_id,payroll_base_amount,payroll_attendance_amount,payroll_overtime_amount,payroll_adjustments,payroll_attendance_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[salonId,expenseDate,'Payroll','Salary',person.name,group,amount,paymentMode,person.name,referenceNo,periodStart,periodEnd,dueDate,payrollNotes,staffId,baseAmount,attendanceAmount,overtimeAmount,JSON.stringify(adjustments),JSON.stringify(summary||{})]);created++;
         }
         if(!created){req.flash('error','Enter a payroll amount for each selected employee.');return res.redirect('/manage/expenses');}
         req.flash('success',`Payroll recorded for ${created} employee${created===1?'':'s'}.`);return res.redirect('/manage/expenses');
