@@ -1,9 +1,10 @@
 'use strict';
 
 const db = require('../db');
-const { asyncRoute } = require('../helpers');
+const { asyncRoute, isoDate } = require('../helpers');
 const { auth } = require('./shared');
 const { audit } = require('../access');
+const { commissionForPeriod } = require('../commission-service');
 
 function commissionAuth(req, res, next) {
   if (!['owner','manager'].includes(req.user?.role)) return res.status(403).render('access_denied.html', { permission:'commission.manage' });
@@ -18,13 +19,18 @@ function values(body, key) {
 module.exports = app => {
   app.get('/commission', auth, commissionAuth, asyncRoute(async(req,res) => {
     const salonId=req.user.salon_id;
-    const [staff,rules]=await Promise.all([
+    const today=isoDate(),monthStart=`${today.slice(0,7)}-01`,start=String(req.query.start||monthStart).slice(0,10),end=String(req.query.end||today).slice(0,10),selectedId=Number(req.query.staff_id||0);
+    const [staff,rules,commission]=await Promise.all([
       db.rows("SELECT id,name,role FROM staff WHERE salon_id=:salonId AND archived=0 AND status='Active' AND name IS NOT NULL AND TRIM(name)<>'' ORDER BY name",{salonId}),
       db.rows('SELECT * FROM staff_commission_rules WHERE salon_id=:salonId ORDER BY staff_id,threshold_amount',{salonId}),
+      commissionForPeriod(salonId,start,end),
     ]);
     const rulesByStaff=new Map();
     for(const rule of rules){const key=Number(rule.staff_id);if(!rulesByStaff.has(key))rulesByStaff.set(key,[]);rulesByStaff.get(key).push(rule);}
-    res.render('commission.html',{staff:staff.map(person=>({...person,rules:rulesByStaff.get(Number(person.id))||[]}))});
+    const commissionByStaff=new Map(commission.map(row=>[Number(row.id),row]));
+    const rows=staff.map(person=>({...person,rules:rulesByStaff.get(Number(person.id))||[],...(commissionByStaff.get(Number(person.id))||{})}));
+    const selected=rows.find(person=>Number(person.id)===selectedId)||rows[0]||null;
+    res.render('commission.html',{staff:rows,selected,start,end});
   }));
 
   app.post('/commission/:staffId', auth, commissionAuth, asyncRoute(async(req,res) => {
