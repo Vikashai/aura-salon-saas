@@ -15,6 +15,7 @@ const CUSTOMER_FIELDS = ['name','mobile','alt_mobile','email','gender','dob','an
   'tags','status','source','referred_by','notes','internal_notes'];
 
 function arr(value) { return Array.isArray(value) ? value : value == null ? [] : [value]; }
+function formArray(body, key) { return arr(body[key] ?? body[`${key}[]`]); }
 
 function normalizeIndianMobile(value) {
   let digits = String(value || '').replace(/\D/g, '');
@@ -274,13 +275,15 @@ module.exports = app => {
     const customerData=customerId?await db.one('SELECT referral_credit,referred_by_id FROM customers WHERE id=:customerId AND salon_id=:salonId',{customerId,salonId}):null;
     if(customerId&&!customerData)return res.status(400).send('Invalid customer');
     const priorBillCount=customerId?Number((await db.one('SELECT COUNT(*) count FROM sales WHERE salon_id=:salonId AND customer_id=:customerId AND cancelled=0',{customerId,salonId})).count):0;
-    const names = arr(req.body.item_name), types = arr(req.body.item_type), quantities = arr(req.body.quantity), staffNames = arr(req.body.staff_name);
+    const itemIds = formArray(req.body,'item_id'), names = formArray(req.body,'item_name'), types = formArray(req.body,'item_type'), quantities = formArray(req.body,'quantity'), staffNames = formArray(req.body,'staff_name');
     const catalog = { Service:['services','price'], Product:['products','selling_price'], Package:['packages','price'], Membership:['packages','price'] };
     const normalizedLines = [];
     for (let index = 0; index < names.length; index++) {
-      const type = types[index], definition = catalog[type], name = String(names[index] || '').trim();
+      const type = types[index], definition = catalog[type], itemId = Number(itemIds[index] || 0), name = String(names[index] || '').trim();
       if (!definition || !name) continue;
-      const item=await db.one(`SELECT name,\`${definition[1]}\` price FROM \`${definition[0]}\` WHERE salon_id=:salonId AND name=:name AND archived=0 AND status='Active' LIMIT 1`,{name,salonId});
+      const item = itemId
+        ? await db.one(`SELECT name,\`${definition[1]}\` price FROM \`${definition[0]}\` WHERE salon_id=:salonId AND id=:itemId AND archived=0 AND status='Active' LIMIT 1`,{itemId,salonId})
+        : await db.one(`SELECT name,\`${definition[1]}\` price FROM \`${definition[0]}\` WHERE salon_id=:salonId AND name=:name AND archived=0 AND status='Active' LIMIT 1`,{name,salonId});
       if (!item) continue;
       const quantity=Number(quantities[index] ?? 1),price=Number(item.price||0);
       if(!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(price)||price<0)continue;
