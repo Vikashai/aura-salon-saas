@@ -19,7 +19,7 @@ module.exports = app => {
   app.get('/commission', auth, commissionAuth, asyncRoute(async(req,res) => {
     const salonId=req.user.salon_id;
     const [staff,rules]=await Promise.all([
-      db.rows("SELECT id,name,role FROM staff WHERE salon_id=:salonId AND archived=0 AND status='Active' ORDER BY name",{salonId}),
+      db.rows("SELECT id,name,role FROM staff WHERE salon_id=:salonId AND archived=0 AND status='Active' AND name IS NOT NULL AND TRIM(name)<>'' ORDER BY name",{salonId}),
       db.rows('SELECT * FROM staff_commission_rules WHERE salon_id=:salonId ORDER BY staff_id,threshold_amount',{salonId}),
     ]);
     const rulesByStaff=new Map();
@@ -30,6 +30,7 @@ module.exports = app => {
   app.post('/commission/:staffId', auth, commissionAuth, asyncRoute(async(req,res) => {
     const salonId=req.user.salon_id,staffId=Number(req.params.staffId),person=await db.one('SELECT id,name FROM staff WHERE id=:staffId AND salon_id=:salonId AND archived=0',{staffId,salonId});
     if(!person)return res.status(404).send('Staff not found');
+    const staffName=String(person.name||'').trim()||`Team member #${staffId}`;
     const thresholds=values(req.body,'threshold_amount'),rates=values(req.body,'rate_percent'),rules=[];
     for(let index=0;index<thresholds.length;index++){
       const threshold=Math.round(Number(thresholds[index]||0)*100)/100,rate=Math.round(Number(rates[index]||0)*100)/100;
@@ -43,8 +44,8 @@ module.exports = app => {
       await connection.execute('DELETE FROM staff_commission_rules WHERE salon_id=? AND staff_id=?',[salonId,staffId]);
       for(const rule of unique)await connection.execute('INSERT INTO staff_commission_rules(salon_id,staff_id,threshold_amount,rate_percent) VALUES(?,?,?,?)',[salonId,staffId,rule.threshold,rule.rate]);
     });
-    await audit(req.user.id,'commission.updated','staff',staffId,`Updated commission rules for ${person.name}`,req);
-    req.flash('success',`Commission rules saved for ${person.name}.`);
+    await audit(req.user.id,'commission.updated','staff',staffId,`Updated commission rules for ${staffName}`,req);
+    req.flash('success',`Commission rules saved for ${staffName}.`);
     res.redirect('/commission');
   }));
 };

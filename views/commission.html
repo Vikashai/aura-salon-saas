@@ -4,7 +4,7 @@
 <div class="commission-grid">
 {% for person in staff %}
   <form class="panel commission-card" method="post" action="/commission/{{person.id}}">
-    <div class="panel-head"><div><h3>{{person.name}}</h3><p>{{person.role or 'Team member'}}</p></div><button class="btn primary compact">Save</button></div>
+    <div class="panel-head"><div><h3>{{person.name or ('Team member #' + (person.id|string))}}</h3><p>{{person.role or 'Team member'}}</p></div><button class="btn primary compact">Save</button></div>
     <div class="commission-head"><span>From sales amount</span><span>Commission %</span><span></span></div>
     <div class="commission-rules">
       {% for rule in person.rules %}
