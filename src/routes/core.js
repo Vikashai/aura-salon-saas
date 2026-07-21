@@ -48,7 +48,9 @@ function salesChart(days, rows) {
   });
   const line = points.map(point => `${point.x},${point.y}`).join(' ');
   const fill = points.length ? `M${points.map(point => `${point.x} ${point.y}`).join(' L')} L700 220 L0 220Z` : '';
-  return { points, line, fill, labels: [scale, scale * .75, scale * .5, scale * .25, 0].map(chartMoney), total: values.reduce((sum, row) => sum + row.amount, 0) };
+  const total = values.reduce((sum, row) => sum + row.amount, 0);
+  const best = values.reduce((winner, row) => row.amount > winner.amount ? row : winner, values[0] || { amount: 0, date: '' });
+  return { points, line, fill, labels: [scale, scale * .75, scale * .5, scale * .25, 0].map(chartMoney), total, average: values.length ? total / values.length : 0, best };
 }
 
 function publicDocument(title, body) {
@@ -147,16 +149,18 @@ module.exports = app => {
       appts_today: (await db.one("SELECT COUNT(*) value FROM appointments WHERE salon_id=:salonId AND appointment_date=:today AND status NOT IN ('cancelled','no_show')", {salonId,today})).value,
     };
     const chartDays = Array.from({ length: 7 }, (_, index) => addDays(today, index - 6));
+    const monthChartDays = Array.from({ length: 30 }, (_, index) => addDays(today, index - 29));
     const [recent, customers, low, top_services, upcoming, chartRows] = await Promise.all([
       db.rows('SELECT s.*,c.name customer FROM sales s LEFT JOIN customers c ON c.id=s.customer_id AND c.salon_id=s.salon_id WHERE s.salon_id=:salonId ORDER BY s.id DESC LIMIT 5',{salonId}),
       db.rows('SELECT * FROM customers WHERE salon_id=:salonId AND archived=0 ORDER BY id DESC LIMIT 5',{salonId}),
       db.rows('SELECT * FROM products WHERE salon_id=:salonId AND archived=0 AND stock<=low_stock ORDER BY stock LIMIT 4',{salonId}),
       db.rows("SELECT item_name,COUNT(*) qty,SUM(price*quantity-discount) amount FROM sale_items WHERE salon_id=:salonId AND item_type='Service' GROUP BY item_name ORDER BY amount DESC LIMIT 4",{salonId}),
       db.rows("SELECT * FROM appointments WHERE salon_id=:salonId AND appointment_date>=:today AND status IN ('pending','confirmed') ORDER BY appointment_date,appointment_time LIMIT 5", {salonId,today}),
-      db.rows('SELECT invoice_date,COALESCE(SUM(final_amount),0) amount FROM sales WHERE salon_id=:salonId AND cancelled=0 AND invoice_date>=:chartStart AND invoice_date<=:today GROUP BY invoice_date ORDER BY invoice_date',{salonId,chartStart:chartDays[0],today}),
+      db.rows('SELECT invoice_date,COALESCE(SUM(final_amount),0) amount FROM sales WHERE salon_id=:salonId AND cancelled=0 AND invoice_date>=:chartStart AND invoice_date<=:today GROUP BY invoice_date ORDER BY invoice_date',{salonId,chartStart:monthChartDays[0],today}),
     ]);
+    const salesCharts = { week: salesChart(chartDays, chartRows), month: salesChart(monthChartDays, chartRows) };
     res.render('dashboard.html', { stats, recent, customers, low, top_services, upcoming,
-      sales_chart: salesChart(chartDays, chartRows),
+      sales_chart: salesCharts.week, sales_chart_json: JSON.stringify(salesCharts),
       today, today_day: new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()) });
   }));
 
