@@ -23,6 +23,34 @@ function normalizeIndianMobile(value) {
   return digits;
 }
 
+function addDays(date, offset) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + offset);
+  return value.toISOString().slice(0, 10);
+}
+
+function chartMoney(value) {
+  const amount = Number(value || 0);
+  if (amount >= 100000) return `₹${Math.round(amount / 1000)}k`;
+  if (amount >= 1000) return `₹${Math.round(amount / 1000)}k`;
+  return `₹${Math.round(amount)}`;
+}
+
+function salesChart(days, rows) {
+  const byDate = new Map(rows.map(row => [String(row.invoice_date).slice(0, 10), Number(row.amount || 0)]));
+  const values = days.map(date => ({ date, day: new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`)), amount: byDate.get(date) || 0 }));
+  const max = Math.max(...values.map(row => row.amount), 0);
+  const scale = max > 0 ? Math.ceil(max / 5000) * 5000 : 5000;
+  const points = values.map((row, index) => {
+    const x = Math.round(index * (700 / Math.max(values.length - 1, 1)));
+    const y = Math.round(200 - (row.amount / scale) * 170);
+    return { ...row, x, y };
+  });
+  const line = points.map(point => `${point.x},${point.y}`).join(' ');
+  const fill = points.length ? `M${points.map(point => `${point.x} ${point.y}`).join(' L')} L700 220 L0 220Z` : '';
+  return { points, line, fill, labels: [scale, scale * .75, scale * .5, scale * .25, 0].map(chartMoney), total: values.reduce((sum, row) => sum + row.amount, 0) };
+}
+
 function publicDocument(title, body) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Aura POS</title><style>*{box-sizing:border-box}body{margin:0;background:#f5f6f1;color:#20211f;font:15px/1.65 Arial,sans-serif}.wrap{width:min(860px,calc(100% - 32px));margin:44px auto;background:#fff;border:1px solid #e3e6df;border-radius:24px;padding:34px}a{color:#475044;font-weight:700}h1{font-size:30px;margin:0 0 10px}h2{margin:28px 0 8px;font-size:18px}p,li{color:#5f665d}.mark{width:38px;height:38px;border-radius:50%;background:#dfff3f;display:grid;place-items:center;margin-bottom:20px}.muted{color:#8a9087;font-size:13px}</style></head><body><main class="wrap"><div class="mark">✦</div>${body}<p class="muted">Last updated: July 2026</p></main></body></html>`;
 }
@@ -118,14 +146,17 @@ module.exports = app => {
       pending: (await db.one('SELECT COALESCE(SUM(pending_amount),0) value FROM sales WHERE salon_id=:salonId AND cancelled=0',{salonId})).value,
       appts_today: (await db.one("SELECT COUNT(*) value FROM appointments WHERE salon_id=:salonId AND appointment_date=:today AND status NOT IN ('cancelled','no_show')", {salonId,today})).value,
     };
-    const [recent, customers, low, top_services, upcoming] = await Promise.all([
+    const chartDays = Array.from({ length: 7 }, (_, index) => addDays(today, index - 6));
+    const [recent, customers, low, top_services, upcoming, chartRows] = await Promise.all([
       db.rows('SELECT s.*,c.name customer FROM sales s LEFT JOIN customers c ON c.id=s.customer_id AND c.salon_id=s.salon_id WHERE s.salon_id=:salonId ORDER BY s.id DESC LIMIT 5',{salonId}),
       db.rows('SELECT * FROM customers WHERE salon_id=:salonId AND archived=0 ORDER BY id DESC LIMIT 5',{salonId}),
       db.rows('SELECT * FROM products WHERE salon_id=:salonId AND archived=0 AND stock<=low_stock ORDER BY stock LIMIT 4',{salonId}),
       db.rows("SELECT item_name,COUNT(*) qty,SUM(price*quantity-discount) amount FROM sale_items WHERE salon_id=:salonId AND item_type='Service' GROUP BY item_name ORDER BY amount DESC LIMIT 4",{salonId}),
       db.rows("SELECT * FROM appointments WHERE salon_id=:salonId AND appointment_date>=:today AND status IN ('pending','confirmed') ORDER BY appointment_date,appointment_time LIMIT 5", {salonId,today}),
+      db.rows('SELECT invoice_date,COALESCE(SUM(final_amount),0) amount FROM sales WHERE salon_id=:salonId AND cancelled=0 AND invoice_date>=:chartStart AND invoice_date<=:today GROUP BY invoice_date ORDER BY invoice_date',{salonId,chartStart:chartDays[0],today}),
     ]);
     res.render('dashboard.html', { stats, recent, customers, low, top_services, upcoming,
+      sales_chart: salesChart(chartDays, chartRows),
       today, today_day: new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()) });
   }));
 
